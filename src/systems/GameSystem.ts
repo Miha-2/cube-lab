@@ -62,17 +62,25 @@ export function updateGame(scene: Scene, dt: number): void {
     const transform = scene.getEntityByName("PlayerCamera")?.getComponent(Transform);
     if (!transform) return;
 
-    // Keyboard movement follows the world axes.
-    const dx = Number(heldKeys.has("KeyW")) - Number(heldKeys.has("KeyS"));
-    const dy = Number(heldKeys.has("Space")) - Number(heldKeys.has("ShiftLeft"));
-    const dz = Number(heldKeys.has("KeyA")) - Number(heldKeys.has("KeyD"));
-    if (dx !== 0 || dy !== 0 || dz !== 0) {
-        const step = cameraSpeed * dt;
-        const offset: vec3 = [dx * step, dy * step, dz * step];
-        // Move the look target with the camera to preserve its direction.
-        transform.location = vec3.add([0, 0, 0], transform.location, offset);
-        transform.target = vec3.add([0, 0, 0], transform.target, offset);
-    }
-
     updateCameraLook(transform);
+
+    const forwardInput = Number(heldKeys.has("KeyW")) - Number(heldKeys.has("KeyS"));
+    const rightInput = Number(heldKeys.has("KeyD")) - Number(heldKeys.has("KeyA"));
+    const verticalInput = Number(heldKeys.has("Space")) - Number(heldKeys.has("ShiftLeft"));
+    if (forwardInput === 0 && rightInput === 0 && verticalInput === 0) return;
+
+    // Project the view direction onto the horizontal plane for WASD.
+    const forward = vec3.subtract([0, 0, 0], transform.target, transform.location);
+    forward[1] = 0;
+    vec3.normalize(forward, forward);
+    const right: vec3 = [-forward[2], 0, forward[0]];
+
+    const step = cameraSpeed * dt;
+    const offset: vec3 = [0, verticalInput * step, 0];
+    vec3.scaleAndAdd(offset, offset, forward, forwardInput * step);
+    vec3.scaleAndAdd(offset, offset, right, rightInput * step);
+
+    // Move the look target with the camera to preserve its direction.
+    transform.location = vec3.add([0, 0, 0], transform.location, offset);
+    transform.target = vec3.add([0, 0, 0], transform.target, offset);
 }
