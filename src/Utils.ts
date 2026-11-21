@@ -63,8 +63,8 @@ export async function createCube() {
         20, 21, 22,    22, 21, 23,
     ]);
     
-    const texture = await createTempTexture([1, 1, 1, 1]);
-    const material = new BasicMaterial(texture, vec4.fromValues(0.5, 1, 0, 1));
+    const texture = await createTempTexture();
+    const material = new BasicMaterial(texture, vec4.fromValues(1, 1, 1, 1));
 
     const cube = new Entity();
     const mesh = new Mesh();
@@ -84,7 +84,7 @@ export async function createCube() {
  */
 export async function createTempTexture(color?: vec4) {
     const raw = new Uint8ClampedArray(4);
-    const col = color ?? vec4.fromValues(1, 0, 0, 1);
+    const col = color ?? vec4.fromValues(1, 1, 1, 1);
     raw[0] = col[0] * 255;
     raw[1] = col[1] * 255;
     raw[2] = col[2] * 255;

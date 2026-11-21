@@ -514,29 +514,22 @@ export class GLTFParser {
     }
 
     async parseMaterial(index: number) {
-        const bitmap = await createTempTexture();
-
-        if (!this.data.materials) {
-            console.warn("No materials found in GLTF");
-            return new BasicMaterial(bitmap, vec4.fromValues(1, 1, 1, 1));
+        const materialSpec = this.data.materials?.[index];
+        if (!materialSpec) {
+            console.warn("GLTF: Material not found", index);
+            return new BasicMaterial(await createTempTexture(), vec4.fromValues(1, 1, 1, 1));
         }
 
-        const materialSpec = this.data.materials[index];
         if (this.materials.has(materialSpec)) {
             return this.materials.get(materialSpec)!;
         }
-        
-        const material = new BasicMaterial(bitmap, vec4.fromValues(1, 1, 1, 1));
+
         const pbrSpec = materialSpec.pbrMetallicRoughness;
-        if (pbrSpec) {
-            if (pbrSpec.baseColorFactor ) {
-                material.baseColor = vec4.fromValues(...pbrSpec.baseColorFactor);
-                material.baseTexture = await createTempTexture(material.baseColor);
-            }
-            if (pbrSpec.baseColorTexture) {
-                material.baseTexture = await this.parseTexture(pbrSpec.baseColorTexture.index);
-            }
-        }
+        const texture = pbrSpec?.baseColorTexture
+            ? await this.parseTexture(pbrSpec.baseColorTexture.index)
+            : await createTempTexture();
+        const factor = pbrSpec?.baseColorFactor ?? [1, 1, 1, 1];
+        const material = new BasicMaterial(texture, vec4.fromValues(...factor));
 
         this.materials.set(materialSpec, material);
         return material;

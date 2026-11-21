@@ -21,6 +21,7 @@ export class RenderState {
     canvas: HTMLCanvasElement;
     context: GPUCanvasContext;
     canvasFormat: GPUTextureFormat;
+    canvasViewFormat: GPUTextureFormat;
 
     // Textures
 
@@ -48,10 +49,8 @@ export class RenderState {
 
         this.context = context;
         this.canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-        this.context.configure({
-            device: this.device,
-            format: this.canvasFormat
-        });
+        this.canvasViewFormat = this.canvasFormat === 'bgra8unorm' ? 'bgra8unorm-srgb' : 'rgba8unorm-srgb';
+        this.configureCanvas();
 
         // Initialize textures
 
@@ -70,6 +69,14 @@ export class RenderState {
         });
     }
 
+    private configureCanvas() {
+        this.context.configure({
+            device: this.device,
+            format: this.canvasFormat,
+            viewFormats: [this.canvasViewFormat]
+        });
+    }
+
     /**
      * Creates and stores a new texture from existing image.
      * Also creates the corresponding texture view.
@@ -81,7 +88,7 @@ export class RenderState {
         }
         
         const texture = this.device.createTexture({
-            format: 'rgba8unorm',
+            format: 'rgba8unorm-srgb',
             size: [image.width, image.height],
             usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
         });
@@ -125,9 +132,6 @@ export class RenderState {
         this.canvas.width = width;
         this.canvas.height = height;
 
-        this.context.configure({
-            device: this.device,
-            format: this.canvasFormat
-        });
+        this.configureCanvas();
     }
 }

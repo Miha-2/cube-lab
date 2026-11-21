@@ -35,7 +35,7 @@ export async function prepareRendering(state: RenderState, scene: Scene) {
         scene,
         camera,
         state.sceneDepthTexture.texture.format,
-        state.canvasFormat,
+        state.canvasViewFormat,
         state
     );
 }
