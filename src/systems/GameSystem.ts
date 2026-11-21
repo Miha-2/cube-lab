@@ -1,4 +1,5 @@
 import { vec3 } from "gl-matrix";
+import { BoxCollider } from "../components/BoxCollider.ts";
 import { Transform } from "../components/Transform.ts";
 import type { Scene } from "../Scene.ts";
 
@@ -69,11 +70,14 @@ function updateCameraLook(transform: Transform) {
     transform.target = vec3.add(vec3.create(), transform.location, forward);
 }
 
-function updateVerticalPosition(cameraY: number, groundEyeY: number, dt: number) {
-    if (jumpRequested && cameraY <= groundEyeY && verticalVelocity === 0) {
-        verticalVelocity = jumpSpeed;
-    }
+function updateVerticalPosition(cameraY: number, groundEyeY: number, grounded: boolean, followsSurface: boolean, dt: number) {
+    const isJumping = jumpRequested && grounded && verticalVelocity === 0;
     jumpRequested = false;
+    if (isJumping) {
+        verticalVelocity = jumpSpeed;
+    } else if (followsSurface && verticalVelocity === 0) {
+        return groundEyeY;
+    }
 
     const nextY = cameraY + verticalVelocity * dt - 0.5 * gravity * dt * dt;
     verticalVelocity -= gravity * dt;
@@ -86,21 +90,104 @@ function updateVerticalPosition(cameraY: number, groundEyeY: number, dt: number)
     return nextY;
 }
 
-function clipBoxAxis(location: vec3, next: number, axis: 0 | 2, min: vec3, max: vec3) {
-    const otherAxis = axis === 0 ? 2 : 0;
-    if (location[1] <= min[1] || location[1] >= max[1] ||
-        location[otherAxis] <= min[otherAxis] + collisionEpsilon ||
-        location[otherAxis] >= max[otherAxis] - collisionEpsilon) {
-        return next;
-    }
+type Interval = [min: number, max: number];
+type BoxPlane = [normalY: number, normalZ: number, limit: number];
 
-    const current = location[axis];
-    if (current <= min[axis] + collisionEpsilon) return Math.min(next, min[axis]);
-    if (current >= max[axis] - collisionEpsilon) return Math.max(next, max[axis]);
+function isInside(value: number, [min, max]: Interval) {
+    return value > min + collisionEpsilon && value < max - collisionEpsilon;
+}
+
+function clipBoxAxis(current: number, next: number, [min, max]: Interval) {
+    if (current <= min + collisionEpsilon) return Math.min(next, min);
+    if (current >= max - collisionEpsilon) return Math.max(next, max);
     return next;
 }
 
-function updateCameraMovement(transform: Transform, cube: Transform | undefined, dt: number) {
+function getBoxBounds(transform: Transform) {
+    const [x] = transform.location;
+    const halfX = Math.abs(transform.scale[0]) + playerHalfWidth;
+    const halfY = Math.abs(transform.scale[1]);
+    const halfZ = Math.abs(transform.scale[2]);
+    const right = vec3.transformQuat([0, 0, 0], [1, 0, 0], transform.rotation);
+    const front = vec3.transformQuat([0, 0, 0], [0, 0, 1], transform.rotation);
+    const yaw = Math.atan2(-right[2], right[0]);
+    const pitch = Math.atan2(-front[1], Math.hypot(front[0], front[2]));
+    const cos = Math.cos(pitch);
+    const sin = Math.sin(pitch);
+
+    // In the box's yaw frame, expand its YZ section by the upright player dimensions.
+    const planes: BoxPlane[] = [[1, 0], [-1, 0], [0, 1], [0, -1],
+        [cos, sin], [-cos, -sin], [-sin, cos], [sin, -cos]].map(([ny, nz]) => [
+        ny, nz,
+        halfY * Math.abs(ny * cos + nz * sin) + halfZ * Math.abs(-ny * sin + nz * cos) +
+            Math.max(0, ny * eyeHeight) + Math.abs(nz) * playerHalfWidth,
+    ]);
+    const xRange: Interval = [x - halfX, x + halfX];
+    return { center: transform.location, xRange, planes, yaw };
+}
+
+// Intersect the planes with a line at a fixed Y or Z coordinate.
+function getBoxSection(planes: BoxPlane[], axis: 0 | 1, fixed: number): Interval | undefined {
+    let min = -Infinity;
+    let max = Infinity;
+    for (const plane of planes) {
+        const coefficient = plane[axis];
+        const remaining = plane[2] - plane[axis === 0 ? 1 : 0] * fixed;
+        if (Math.abs(coefficient) <= collisionEpsilon) {
+            if (remaining <= collisionEpsilon) return;
+        } else if (coefficient > 0) {
+            max = Math.min(max, remaining / coefficient);
+        } else {
+            min = Math.max(min, remaining / coefficient);
+        }
+    }
+    if (min + collisionEpsilon < max) return [min, max];
+}
+
+function resolveBoxCollisions(scene: Scene, location: vec3, next: vec3) {
+    const boxes = [];
+    for (const entity of scene.getEntitiesByComponent(BoxCollider)) {
+        const transform = entity.getComponent(Transform);
+        if (!transform) continue;
+        const box = getBoxBounds(transform);
+        const [x, , z] = vec3.rotateY([0, 0, 0], location, box.center, -box.yaw);
+        const currentHeight = getBoxSection(box.planes, 0, z - box.center[2])?.[1];
+        const standingOnBox = currentHeight !== undefined && isInside(x, box.xRange) &&
+            Math.abs(location[1] - box.center[1] - currentHeight) <= collisionEpsilon;
+        boxes.push({ ...box, standingOnBox });
+
+        const horizontalSection = getBoxSection(box.planes, 1, location[1] - box.center[1]);
+        if (!horizontalSection || standingOnBox) continue;
+        const zRange: Interval = [box.center[2] + horizontalSection[0], box.center[2] + horizontalSection[1]];
+
+        // Align movement with the box's local X and Z axes before clipping it.
+        const boxNext = vec3.rotateY([0, 0, 0], next, box.center, -box.yaw);
+        const clippedX = isInside(z, zRange) ? clipBoxAxis(x, boxNext[0], box.xRange) : boxNext[0];
+        const clippedZ = isInside(clippedX, box.xRange) ? clipBoxAxis(z, boxNext[2], zRange) : boxNext[2];
+        if (clippedX !== boxNext[0] || clippedZ !== boxNext[2]) {
+            vec3.rotateY(next, [clippedX, location[1], clippedZ], box.center, box.yaw);
+        }
+    }
+
+    // Use the highest surface under the resolved horizontal position.
+    let groundEyeY = groundY + eyeHeight;
+    let followsSurface = false;
+    for (const box of boxes) {
+        const [x, , z] = vec3.rotateY([0, 0, 0], next, box.center, -box.yaw);
+        if (!isInside(x, box.xRange)) continue;
+        const section = getBoxSection(box.planes, 0, z - box.center[2]);
+        if (!section) continue;
+        const top = box.center[1] + section[1];
+        if (box.standingOnBox || location[1] >= top - collisionEpsilon) {
+            groundEyeY = Math.max(groundEyeY, top);
+            followsSurface ||= box.standingOnBox;
+        }
+    }
+    const grounded = location[1] <= groundY + eyeHeight || boxes.some((box) => box.standingOnBox);
+    return { groundEyeY, grounded, followsSurface };
+}
+
+function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
     if (dt <= 0) return;
 
     const forwardInput = Number(heldKeys.has("KeyW")) - Number(heldKeys.has("KeyS"));
@@ -117,38 +204,8 @@ function updateCameraMovement(transform: Transform, cube: Transform | undefined,
     const next = vec3.scaleAndAdd([0, 0, 0], location, forward, forwardInput * step);
     vec3.scaleAndAdd(next, next, right, rightInput * step);
 
-    let groundEyeY = groundY + eyeHeight;
-    if (cube) {
-        // Expand the cube's bounds so the camera represents a player with width and height.
-        const [x, y, z] = cube.location;
-        const halfX = Math.abs(cube.scale[0]) + playerHalfWidth;
-        const halfY = Math.abs(cube.scale[1]);
-        const halfZ = Math.abs(cube.scale[2]) + playerHalfWidth;
-        const min: vec3 = [x - halfX, y - halfY, z - halfZ];
-        const max: vec3 = [x + halfX, y + halfY + eyeHeight, z + halfZ];
-
-        // Align the movement with the box's local X and Z axes before clipping it.
-        const boxAxis = vec3.transformQuat([0, 0, 0], [0, 0, 1], cube.rotation);
-        const yaw = Math.atan2(boxAxis[0], boxAxis[2]);
-        const boxLocation = vec3.rotateY([0, 0, 0], location, cube.location, -yaw);
-        const boxNext = vec3.rotateY([0, 0, 0], next, cube.location, -yaw);
-        boxLocation[1] = location[1];
-        const clippedX = clipBoxAxis(boxLocation, boxNext[0], 0, min, max);
-        boxLocation[0] = clippedX;
-        const clippedZ = clipBoxAxis(boxLocation, boxNext[2], 2, min, max);
-
-        if (clippedX !== boxNext[0] || clippedZ !== boxNext[2]) {
-            vec3.rotateY(next, [clippedX, location[1], clippedZ], cube.location, yaw);
-        }
-
-        if (location[1] >= max[1] && clippedX > min[0] + collisionEpsilon &&
-            clippedX < max[0] - collisionEpsilon && clippedZ > min[2] + collisionEpsilon &&
-            clippedZ < max[2] - collisionEpsilon) {
-            groundEyeY = Math.max(groundEyeY, max[1]);
-        }
-    }
-
-    next[1] = updateVerticalPosition(location[1], groundEyeY, dt);
+    const { groundEyeY, grounded, followsSurface } = resolveBoxCollisions(scene, location, next);
+    next[1] = updateVerticalPosition(location[1], groundEyeY, grounded, followsSurface, dt);
     const offset = vec3.subtract([0, 0, 0], next, location);
     if (offset[0] === 0 && offset[1] === 0 && offset[2] === 0) return;
 
@@ -163,6 +220,5 @@ export function updateGame(scene: Scene, dt: number): void {
     if (!transform) return;
 
     updateCameraLook(transform);
-    const cube = scene.getEntityByName("Cube")?.getComponent(Transform);
-    updateCameraMovement(transform, cube, dt);
+    updateCameraMovement(scene, transform, dt);
 }
