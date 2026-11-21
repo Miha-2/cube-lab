@@ -5,8 +5,10 @@ import type { Scene } from "../Scene.ts";
 const cameraSpeed = 7;
 const groundY = 0;
 const eyeHeight = 1.7;
+const playerHalfWidth = 0.3;
+const collisionEpsilon = 1e-8;
 const gravity = 9.81;
-const jumpSpeed = 4.5;
+const jumpSpeed = 6.3;
 const mouseSensitivity = 0.002;
 const pitchLimit = Math.PI / 2 - 0.01;
 const heldKeys = new Set<string>();
@@ -67,10 +69,7 @@ function updateCameraLook(transform: Transform) {
     transform.target = vec3.add(vec3.create(), transform.location, forward);
 }
 
-function updateJump(cameraY: number, dt: number) {
-    if (dt <= 0) return 0;
-
-    const groundEyeY = groundY + eyeHeight;
+function updateVerticalPosition(cameraY: number, groundEyeY: number, dt: number) {
     if (jumpRequested && cameraY <= groundEyeY && verticalVelocity === 0) {
         verticalVelocity = jumpSpeed;
     }
@@ -79,19 +78,33 @@ function updateJump(cameraY: number, dt: number) {
     const nextY = cameraY + verticalVelocity * dt - 0.5 * gravity * dt * dt;
     verticalVelocity -= gravity * dt;
 
-    // Land with the player's feet on the ground plane.
+    // Stop falling when the player's feet reach a surface.
     if (nextY <= groundEyeY) {
         verticalVelocity = 0;
-        return groundEyeY - cameraY;
+        return groundEyeY;
     }
-    return nextY - cameraY;
+    return nextY;
 }
 
-function updateCameraMovement(transform: Transform, dt: number) {
+function clipBoxAxis(location: vec3, next: number, axis: 0 | 2, min: vec3, max: vec3) {
+    const otherAxis = axis === 0 ? 2 : 0;
+    if (location[1] <= min[1] || location[1] >= max[1] ||
+        location[otherAxis] <= min[otherAxis] + collisionEpsilon ||
+        location[otherAxis] >= max[otherAxis] - collisionEpsilon) {
+        return next;
+    }
+
+    const current = location[axis];
+    if (current <= min[axis] + collisionEpsilon) return Math.min(next, min[axis]);
+    if (current >= max[axis] - collisionEpsilon) return Math.max(next, max[axis]);
+    return next;
+}
+
+function updateCameraMovement(transform: Transform, cube: Transform | undefined, dt: number) {
+    if (dt <= 0) return;
+
     const forwardInput = Number(heldKeys.has("KeyW")) - Number(heldKeys.has("KeyS"));
     const rightInput = Number(heldKeys.has("KeyD")) - Number(heldKeys.has("KeyA"));
-    const verticalOffset = updateJump(transform.location[1], dt);
-    if (forwardInput === 0 && rightInput === 0 && verticalOffset === 0) return;
 
     // Project the view direction onto the horizontal plane for WASD.
     const forward = vec3.subtract([0, 0, 0], transform.target, transform.location);
@@ -100,12 +113,47 @@ function updateCameraMovement(transform: Transform, dt: number) {
     const right: vec3 = [-forward[2], 0, forward[0]];
 
     const step = cameraSpeed * dt;
-    const offset: vec3 = [0, verticalOffset, 0];
-    vec3.scaleAndAdd(offset, offset, forward, forwardInput * step);
-    vec3.scaleAndAdd(offset, offset, right, rightInput * step);
+    const location = transform.location;
+    const next = vec3.scaleAndAdd([0, 0, 0], location, forward, forwardInput * step);
+    vec3.scaleAndAdd(next, next, right, rightInput * step);
+
+    let groundEyeY = groundY + eyeHeight;
+    if (cube) {
+        // Expand the cube's bounds so the camera represents a player with width and height.
+        const [x, y, z] = cube.location;
+        const halfX = Math.abs(cube.scale[0]) + playerHalfWidth;
+        const halfY = Math.abs(cube.scale[1]);
+        const halfZ = Math.abs(cube.scale[2]) + playerHalfWidth;
+        const min: vec3 = [x - halfX, y - halfY, z - halfZ];
+        const max: vec3 = [x + halfX, y + halfY + eyeHeight, z + halfZ];
+
+        // Align the movement with the box's local X and Z axes before clipping it.
+        const boxAxis = vec3.transformQuat([0, 0, 0], [0, 0, 1], cube.rotation);
+        const yaw = Math.atan2(boxAxis[0], boxAxis[2]);
+        const boxLocation = vec3.rotateY([0, 0, 0], location, cube.location, -yaw);
+        const boxNext = vec3.rotateY([0, 0, 0], next, cube.location, -yaw);
+        boxLocation[1] = location[1];
+        const clippedX = clipBoxAxis(boxLocation, boxNext[0], 0, min, max);
+        boxLocation[0] = clippedX;
+        const clippedZ = clipBoxAxis(boxLocation, boxNext[2], 2, min, max);
+
+        if (clippedX !== boxNext[0] || clippedZ !== boxNext[2]) {
+            vec3.rotateY(next, [clippedX, location[1], clippedZ], cube.location, yaw);
+        }
+
+        if (location[1] >= max[1] && clippedX > min[0] + collisionEpsilon &&
+            clippedX < max[0] - collisionEpsilon && clippedZ > min[2] + collisionEpsilon &&
+            clippedZ < max[2] - collisionEpsilon) {
+            groundEyeY = Math.max(groundEyeY, max[1]);
+        }
+    }
+
+    next[1] = updateVerticalPosition(location[1], groundEyeY, dt);
+    const offset = vec3.subtract([0, 0, 0], next, location);
+    if (offset[0] === 0 && offset[1] === 0 && offset[2] === 0) return;
 
     // Move the look target with the camera to preserve its direction.
-    transform.location = vec3.add([0, 0, 0], transform.location, offset);
+    transform.location = next;
     transform.target = vec3.add([0, 0, 0], transform.target, offset);
 }
 
@@ -115,5 +163,6 @@ export function updateGame(scene: Scene, dt: number): void {
     if (!transform) return;
 
     updateCameraLook(transform);
-    updateCameraMovement(transform, dt);
+    const cube = scene.getEntityByName("Cube")?.getComponent(Transform);
+    updateCameraMovement(transform, cube, dt);
 }
