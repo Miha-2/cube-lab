@@ -81,7 +81,7 @@ export class RenderState {
         }
         
         const texture = this.device.createTexture({
-            format: 'rgba8unorm',
+            format: 'rgba8unorm-srgb',
             size: [image.width, image.height],
             usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
         });

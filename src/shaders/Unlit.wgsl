@@ -17,6 +17,7 @@ struct SkinnedVertexInput {
 struct VertexOutput {
    @builtin(position) position: vec4f, 
    @location(0) uv: vec2f,
+   @location(1) worldPosition: vec3f,
 }
 
 struct Camera {
@@ -42,6 +43,7 @@ fn vertex(input:VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = position;
     output.uv = input.uv;
+    output.worldPosition = (model.matrix * vec4f(input.position, 1.0)).xyz;
     return output;
 }
 
@@ -56,10 +58,25 @@ fn vertexSkinned(input: SkinnedVertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = camera.projection * camera.view * model.matrix * skin * vec4f(input.position, 1.0);
     output.uv = input.uv;
+    output.worldPosition = (model.matrix * skin * vec4f(input.position, 1.0)).xyz;
     return output;
 }
 
 @fragment
 fn fragment(input: VertexOutput) -> @location(0) vec4f {
-    return textureSample(baseTexture, textureSampler, input.uv);
+    let texel = textureSample(baseTexture, textureSampler, input.uv);
+    // Geometric normals also handle non-uniform and mirrored Blender object scales.
+    let faceNormal = cross(dpdx(input.worldPosition), dpdy(input.worldPosition));
+    let normal = faceNormal / max(length(faceNormal), 0.000001);
+    let lightDirection = normalize(vec3f(0.4, 1.0, 0.3));
+    // shortcut: fixed two-sided light without shadows; extend when scene lights are needed.
+    let lighting = 0.55 + 0.45 * abs(dot(normal, lightDirection));
+    let linearColor = clamp(texel.rgb * color.rgb * lighting, vec3f(0.0), vec3f(1.0));
+    // The canvas uses an unorm format, so encode linear lighting to display sRGB.
+    let srgb = select(
+        1.055 * pow(linearColor, vec3f(1.0 / 2.4)) - 0.055,
+        12.92 * linearColor,
+        linearColor <= vec3f(0.0031308)
+    );
+    return vec4f(srgb, texel.a * color.a);
 }

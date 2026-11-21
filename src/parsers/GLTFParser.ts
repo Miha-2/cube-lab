@@ -514,7 +514,7 @@ export class GLTFParser {
     }
 
     async parseMaterial(index: number) {
-        const bitmap = await createTempTexture();
+        const bitmap = await createTempTexture([1, 1, 1, 1]);
 
         if (!this.data.materials) {
             console.warn("No materials found in GLTF");
@@ -531,7 +531,6 @@ export class GLTFParser {
         if (pbrSpec) {
             if (pbrSpec.baseColorFactor ) {
                 material.baseColor = vec4.fromValues(...pbrSpec.baseColorFactor);
-                material.baseTexture = await createTempTexture(material.baseColor);
             }
             if (pbrSpec.baseColorTexture) {
                 material.baseTexture = await this.parseTexture(pbrSpec.baseColorTexture.index);
