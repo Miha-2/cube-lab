@@ -4,7 +4,6 @@ import { Transform } from "../components/Transform.ts";
 import type { Scene } from "../Scene.ts";
 
 const cameraSpeed = 7;
-const groundY = 0;
 const eyeHeight = 1.7;
 const playerHalfWidth = 0.3;
 const collisionEpsilon = 1e-8;
@@ -170,7 +169,7 @@ function resolveBoxCollisions(scene: Scene, location: vec3, next: vec3) {
     }
 
     // Use the highest surface under the resolved horizontal position.
-    let groundEyeY = groundY + eyeHeight;
+    let groundEyeY = -Infinity;
     let followsSurface = false;
     for (const box of boxes) {
         const [x, , z] = vec3.rotateY([0, 0, 0], next, box.center, -box.yaw);
@@ -183,7 +182,7 @@ function resolveBoxCollisions(scene: Scene, location: vec3, next: vec3) {
             followsSurface ||= box.standingOnBox;
         }
     }
-    const grounded = location[1] <= groundY + eyeHeight || boxes.some((box) => box.standingOnBox);
+    const grounded = boxes.some((box) => box.standingOnBox);
     return { groundEyeY, grounded, followsSurface };
 }
 

@@ -17,6 +17,7 @@ export async function createStarterScene() {
     const floorTransform = floor.getComponent(Transform)!;
     floorTransform.location = [0, -0.1, 0];
     floorTransform.scale = [10, 0.1, 10];
+    floor.addComponent(new BoxCollider());
 
     const leftBoxPitch = Math.PI / 9;
     const leftBoxHeight = 0.55 * Math.cos(leftBoxPitch) + 0.7 * Math.sin(leftBoxPitch);
