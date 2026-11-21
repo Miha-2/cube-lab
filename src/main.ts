@@ -3,46 +3,16 @@ import { updateBuffers } from "./systems/BufferUpdateSystem.ts";
 import { prepareRendering } from "./systems/PrepareRenderSystem.ts";
 import { render } from "./systems/RenderSystem.ts";
 import { computeTransforms } from "./systems/TransformSystem.ts";
-import { animate as animateScene, playAnimation } from "./systems/AnimationSystem.ts";
+import { animate as animateScene } from "./systems/AnimationSystem.ts";
 import { createBuffers } from "./systems/BufferInitSystem.ts";
-import { GLTFParser } from "./parsers/GLTFParser.ts";
 import { Camera } from "./components/Camera.ts";
 import { computeSkins } from "./systems/SkinningSystem.ts";
-import { KeyframeAnimations } from "./components/KeyframeAnimation.ts";
+import { createStarterScene } from "./StarterScene.ts";
 
 
 // ------ Create sample scene ------ //
 
-const gltfParser = new GLTFParser();
-/* const gltfContent = await fetch("data/demo_scene.gltf").then((r) => r.text());
-gltfParser.setJson(gltfContent, 'data/');
-
-const scene = await gltfParser.parseScene(0);
-if (!scene) {
-    throw Error("Could not get GLTF scene!");
-}
-console.log(scene);
-const icosphere = scene.getEntityByName('Icosphere');
-if (icosphere) {
-    playAnimation(scene, icosphere, 'IkosferaAkcija');
-}
-
-const cylinder = scene.getEntityByName('Okostje');
-if (cylinder) {
-    playAnimation(scene, cylinder, 'OkostjeAkcija')
-}*/
-
-const gltfContent = await fetch("data/little_guy.gltf").then((r) => r.text());
-gltfParser.setJson(gltfContent, 'data/');
-const scene = await gltfParser.parseScene(0);
-if (!scene) {
-    throw Error("Could not get GLTF scene!");
-}
-console.log(scene);
-const player = scene.getEntityByName('Okostje');
-if (player) {
-    playAnimation(scene, player, 'dance');
-}
+const scene = await createStarterScene();
 
 
 // ------ Initalize GPU/Rendering specific interfaces ------ //
