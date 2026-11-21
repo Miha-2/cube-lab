@@ -57,13 +57,7 @@ function updateCameraLook(transform: Transform) {
     transform.target = vec3.add(vec3.create(), transform.location, forward);
 }
 
-/** Updates game logic once per frame. Delta time is in seconds. */
-export function updateGame(scene: Scene, dt: number): void {
-    const transform = scene.getEntityByName("PlayerCamera")?.getComponent(Transform);
-    if (!transform) return;
-
-    updateCameraLook(transform);
-
+function updateCameraMovement(transform: Transform, dt: number) {
     const forwardInput = Number(heldKeys.has("KeyW")) - Number(heldKeys.has("KeyS"));
     const rightInput = Number(heldKeys.has("KeyD")) - Number(heldKeys.has("KeyA"));
     const verticalInput = Number(heldKeys.has("Space")) - Number(heldKeys.has("ShiftLeft"));
@@ -83,4 +77,13 @@ export function updateGame(scene: Scene, dt: number): void {
     // Move the look target with the camera to preserve its direction.
     transform.location = vec3.add([0, 0, 0], transform.location, offset);
     transform.target = vec3.add([0, 0, 0], transform.target, offset);
+}
+
+/** Updates game logic once per frame. Delta time is in seconds. */
+export function updateGame(scene: Scene, dt: number): void {
+    const transform = scene.getEntityByName("PlayerCamera")?.getComponent(Transform);
+    if (!transform) return;
+
+    updateCameraLook(transform);
+    updateCameraMovement(transform, dt);
 }
