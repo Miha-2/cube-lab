@@ -10,8 +10,7 @@ export abstract class Material {
 
 
 /**
- * A simple example material that just applies
- * unshaded image texture to the mesh.
+ * A textured material for basic mesh rendering.
  */
 export class BasicMaterial extends Material {
     baseTexture: ImageBitmap;

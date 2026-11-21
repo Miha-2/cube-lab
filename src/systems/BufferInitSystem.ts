@@ -40,9 +40,8 @@ function _createTransformBuffers(state: RenderState, entity: Entity) {
         return;
     }
 
-    let transformMatrixSize = 16 * 4;
     transform.uniformBuffer = state.device.createBuffer({
-        size: transformMatrixSize,
+        size: 2 * 16 * Float32Array.BYTES_PER_ELEMENT, // Model and normal matrices
         usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM
     });
 }

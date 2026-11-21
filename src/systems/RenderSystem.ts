@@ -29,7 +29,7 @@ export function render(state: RenderState, scene: Scene) {
         }
     });
 
-    state.unlitRenderer?.render(renderPass, scene);
+    state.litRenderer?.render(renderPass, scene);
 
     renderPass.end();
     state.device.queue.submit([commandEncoder.finish()]);

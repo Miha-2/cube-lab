@@ -1,3 +1,4 @@
+import { mat4 } from "gl-matrix";
 import { Camera } from "../components/Camera.ts";
 import { Transform } from "../components/Transform.ts";
 import type { RenderState } from "../RenderState.ts";
@@ -6,6 +7,8 @@ import { Mesh } from "../components/Mesh.ts";
 import type { Entity } from "../Entity.ts";
 import { BasicMaterial } from "../data/Material.ts";
 import { Skin } from "../components/Skin.ts";
+
+const normalMatrix = mat4.create();
 
 export function _writeCameraBuffer(state: RenderState, entity: Entity) {
     const camera = entity.getComponent(Camera);
@@ -35,7 +38,14 @@ export function _writeTransformBuffer(state: RenderState, entity: Entity) {
     }
 
     if (transform.uniformBuffer) {
-        state.device.queue.writeBuffer(transform.uniformBuffer, 0, transform.worldMatrix);
+        const modelMatrix = transform.worldMatrix;
+        if (mat4.invert(normalMatrix, modelMatrix)) {
+            mat4.transpose(normalMatrix, normalMatrix);
+        } else {
+            mat4.identity(normalMatrix);
+        }
+        state.device.queue.writeBuffer(transform.uniformBuffer, 0, modelMatrix);
+        state.device.queue.writeBuffer(transform.uniformBuffer, 64, normalMatrix);
     } else {
         console.warn("Transform buffer was not initialized! Ignoring...");
     }

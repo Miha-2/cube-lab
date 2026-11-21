@@ -1,7 +1,7 @@
 import { Camera } from "../components/Camera.ts";
 import { Mesh } from "../components/Mesh.ts";
 import { BasicMaterial } from "../data/Material.ts";
-import { UnlitRenderer } from "../renderers/UnlitRenderer.ts";
+import { LitRenderer } from "../renderers/LitRenderer.ts";
 import type { RenderState } from "../RenderState.ts";
 import type { Scene } from "../Scene.ts";
 
@@ -30,14 +30,12 @@ export async function prepareRendering(state: RenderState, scene: Scene) {
 
     console.log("Preparing renderers...");
     
-    // Unlit renderer
     const camera = scene.getEntitiesByComponent(Camera)[0];
-    const unlitRenderer = new UnlitRenderer(
+    state.litRenderer = new LitRenderer(
         scene,
         camera,
         state.sceneDepthTexture.texture.format,
         state.canvasFormat,
         state
     );
-    state.unlitRenderer = unlitRenderer;
 }

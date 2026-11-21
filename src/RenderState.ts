@@ -1,4 +1,4 @@
-import type { UnlitRenderer } from "./renderers/UnlitRenderer.ts";
+import type { LitRenderer } from "./renderers/LitRenderer.ts";
 
 
 /**
@@ -32,7 +32,7 @@ export class RenderState {
 
     // Renderers
 
-    unlitRenderer: UnlitRenderer | null = null;
+    litRenderer: LitRenderer | null = null;
 
 
     constructor(device: GPUDevice, canvas: HTMLCanvasElement) {

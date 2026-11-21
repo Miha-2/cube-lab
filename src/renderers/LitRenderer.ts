@@ -1,4 +1,5 @@
 import { Camera } from "../components/Camera.ts";
+import { Light, LightType } from "../components/Light.ts";
 import { Mesh } from "../components/Mesh.ts";
 import { Skin } from "../components/Skin.ts";
 import { Transform } from "../components/Transform.ts";
@@ -6,14 +7,16 @@ import { BasicMaterial, Material } from "../data/Material.ts";
 import type { Entity } from "../Entity.ts";
 import type { RenderState } from "../RenderState.ts";
 import type { Scene } from "../Scene.ts";
-import shaderCode from "../shaders/Unlit.wgsl?raw";
+import shaderCode from "../shaders/Lit.wgsl?raw";
 
 
 /**
- * A simple renderer that uses an unlit shader (Unlit.wgsl)
- * to render textured objects
+ * Renders textured objects with ambient and point lighting.
  */
-export class UnlitRenderer {
+export class LitRenderer {
+    private readonly device: GPUDevice;
+    private readonly lightBuffer: GPUBuffer;
+    private readonly lightData = new Float32Array(8);
     pipeline: GPURenderPipeline;        // for objects without skeleton
     skinnedPipeline: GPURenderPipeline; // for objects with skeleton
 
@@ -35,31 +38,41 @@ export class UnlitRenderer {
         renderState: RenderState
     ) {
         if (!camera) {
-            throw Error("No camera provided to Unlit Renderer!");
+            throw Error("No camera provided to LitRenderer!");
         }
+        this.device = renderState.device;
+        this.lightBuffer = this.device.createBuffer({
+            label: 'PointLightUniforms',
+            size: this.lightData.byteLength,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
 
         // Bind Group Layouts
 
-        const cameraBindGroupLayout = renderState.device.createBindGroupLayout({
-            label: 'UnlitCameraLayout',
+        const frameBindGroupLayout = renderState.device.createBindGroupLayout({
+            label: 'LitFrameLayout',
             entries: [{
                 binding: 0,  // View + Projection matrix
                 visibility: GPUShaderStage.VERTEX,
+                buffer: { type: 'uniform' }
+            }, {
+                binding: 1,  // Point light uniforms
+                visibility: GPUShaderStage.FRAGMENT,
                 buffer: { type: 'uniform' }
             }]
         });
 
         const modelBindGroupLayout = renderState.device.createBindGroupLayout({
-            label: 'UnlitModelLayout',
+            label: 'LitModelLayout',
             entries: [{
-                binding: 0, // Model matrix
+                binding: 0, // Model and normal matrices
                 visibility: GPUShaderStage.VERTEX,
                 buffer: { type: 'uniform' }
             }]
         });
 
         const materialBindGroupLayout = renderState.device.createBindGroupLayout({
-            label: 'UnlitMaterialLayout',
+            label: 'LitMaterialLayout',
             entries: [
                 {
                     binding: 0,  // Material uniforms
@@ -86,7 +99,7 @@ export class UnlitRenderer {
         });
 
         const skinBindGroupLayout = renderState.device.createBindGroupLayout({
-            label: 'UnlitSkinLayout',
+            label: 'LitSkinLayout',
             entries: [{
                 binding: 0, // Joint matrices
                 visibility: GPUShaderStage.VERTEX,
@@ -98,7 +111,7 @@ export class UnlitRenderer {
 
         const pipelineLayout = renderState.device.createPipelineLayout({
             bindGroupLayouts: [
-                cameraBindGroupLayout,
+                frameBindGroupLayout,
                 modelBindGroupLayout,
                 materialBindGroupLayout
             ]
@@ -106,7 +119,7 @@ export class UnlitRenderer {
 
         const skinnedPipelineLayout = renderState.device.createPipelineLayout({
             bindGroupLayouts: [
-                cameraBindGroupLayout,
+                frameBindGroupLayout,
                 modelBindGroupLayout,
                 materialBindGroupLayout,
                 skinBindGroupLayout
@@ -114,7 +127,7 @@ export class UnlitRenderer {
         });
 
         const shaderModule = renderState.device.createShaderModule({
-            label: 'UnlitShader',
+            label: 'LitShader',
             code: shaderCode
         });
         const vertexLayout: GPUVertexBufferLayout = {
@@ -143,7 +156,7 @@ export class UnlitRenderer {
             ],
         };
         this.pipeline = renderState.device.createRenderPipeline({
-            label: 'UnlitPipeline',
+            label: 'LitPipeline',
             layout: pipelineLayout,
             vertex: {
                 module: shaderModule,
@@ -165,7 +178,7 @@ export class UnlitRenderer {
 
         
         this.skinnedPipeline = renderState.device.createRenderPipeline({
-            label: 'UnlitSkinnedPipeline',
+            label: 'LitSkinnedPipeline',
             layout: skinnedPipelineLayout,
             vertex: {
                 module: shaderModule,
@@ -199,10 +212,13 @@ export class UnlitRenderer {
             throw Error("Provided entity is not a valid camera!");
         }
         this.frameBindGroup = renderState.device.createBindGroup({
-            layout: cameraBindGroupLayout,
+            layout: frameBindGroupLayout,
             entries: [{
                 binding: 0,
                 resource: cameraComponent.cameraBuffer
+            }, {
+                binding: 1,
+                resource: this.lightBuffer
             }]
         });
 
@@ -258,12 +274,32 @@ export class UnlitRenderer {
         }
     }
 
+    private updatePointLight(scene: Scene) {
+        this.lightData[3] = 0;
+        for (const entity of scene.getEntitiesByComponent(Light)) {
+            const light = entity.getComponent(Light);
+            const transform = entity.getComponent(Transform);
+            if (light?.type !== LightType.Point || !transform) continue;
+
+            // The translation column gives the light position in world space.
+            const worldMatrix = transform.worldMatrix;
+            this.lightData[0] = worldMatrix[12];
+            this.lightData[1] = worldMatrix[13];
+            this.lightData[2] = worldMatrix[14];
+            this.lightData[3] = light.intensity;
+            this.lightData.set(light.color, 4);
+            break;
+        }
+        this.device.queue.writeBuffer(this.lightBuffer, 0, this.lightData);
+    }
+
     /**
      * Renders the scene in the given render pass
      * @param pass render pass to draw in
      * @param scene the scene to render
      */
     render(pass: GPURenderPassEncoder, scene: Scene) {
+        this.updatePointLight(scene);
         pass.setBindGroup(0, this.frameBindGroup);
         for (const entity of scene.entities) {
             const mesh = entity.getComponent(Mesh);
