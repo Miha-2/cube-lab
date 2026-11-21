@@ -8,7 +8,7 @@ import { createBuffers } from "./systems/BufferInitSystem.ts";
 import { Camera } from "./components/Camera.ts";
 import { computeSkins } from "./systems/SkinningSystem.ts";
 import { createStarterScene } from "./StarterScene.ts";
-import { updateGame } from "./systems/GameSystem.ts";
+import { initializeCameraControls, updateGame } from "./systems/GameSystem.ts";
 
 
 // ------ Create sample scene ------ //
@@ -49,6 +49,8 @@ await prepareRendering(renderState, scene);
 
 
 // ------ Events ------ //
+
+initializeCameraControls(canvas);
 
 function resize() {
     if (!canvas) {
