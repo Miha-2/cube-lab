@@ -6,7 +6,7 @@ import { getPlayerBoxContacts, resolvePlayerBoxMovement } from "./BoxCollisionSy
 const cameraSpeed = 7;
 const maxWalkableSlope = Math.PI / 6;
 const slideSpeed = 3;
-const eyeHeight = 1.7;
+export const playerEyeHeight = 1.7;
 const playerHalfWidth = 0.3;
 const gravity = 9.81;
 const jumpSpeed = 6.3;
@@ -107,7 +107,7 @@ function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
     const next = vec3.scaleAndAdd([0, 0, 0], location, forward, forwardInput * step);
     vec3.scaleAndAdd(next, next, right, rightInput * step);
 
-    const boxes = getPlayerBoxContacts(scene, location, eyeHeight, playerHalfWidth);
+    const boxes = getPlayerBoxContacts(scene, location, playerEyeHeight, playerHalfWidth);
     const slopeLimit = maxWalkableSlope + 1e-6;
     const grounded = boxes.some(({ supportSlope }) => supportSlope !== undefined && Math.abs(supportSlope) <= slopeLimit);
     const steepBox = boxes.find(({ supportSlope }) => supportSlope !== undefined && Math.abs(supportSlope) > slopeLimit);
