@@ -2,7 +2,7 @@ import { vec3 } from "gl-matrix";
 import { Transform } from "../components/Transform.ts";
 import type { Scene } from "../Scene.ts";
 import { getPlayerBoxContacts, resolvePlayerBoxMovement } from "./BoxCollisionSystem.ts";
-import { updateCubeCarry } from "./CubeCarrySystem.ts";
+import { getHeldCubeCollider, updateCubeCarry } from "./CubeCarrySystem.ts";
 
 const cameraSpeed = 7;
 const maxWalkableSlope = Math.PI / 6;
@@ -133,7 +133,8 @@ function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
     const next = vec3.scaleAndAdd([0, 0, 0], location, forward, forwardInput * step);
     vec3.scaleAndAdd(next, next, right, rightInput * step);
 
-    const boxes = getPlayerBoxContacts(scene, location, playerEyeHeight, playerHalfWidth, headClearance);
+    const heldCollider = getHeldCubeCollider(scene);
+    const boxes = getPlayerBoxContacts(scene, location, playerEyeHeight, playerHalfWidth, headClearance, heldCollider);
     const slopeLimit = maxWalkableSlope + 1e-6;
     const grounded = boxes.some(({ supportSlope }) => supportSlope !== undefined && Math.abs(supportSlope) <= slopeLimit);
     const steepBox = boxes.find(({ supportSlope }) => supportSlope !== undefined && Math.abs(supportSlope) > slopeLimit);

@@ -1,6 +1,7 @@
 import { vec3 } from "gl-matrix";
 import { BoxCollider } from "../components/BoxCollider.ts";
 import { Transform } from "../components/Transform.ts";
+import type { Entity } from "../Entity.ts";
 import type { Scene } from "../Scene.ts";
 
 const collisionEpsilon = 1e-8;
@@ -125,10 +126,14 @@ function getBoxSection(planes: BoxPlane[], axis: 0 | 1, fixed: number) {
 type BoxContact = ReturnType<typeof getBoxBounds> & {
     x: number;
     z: number;
+    supportsPlayer: boolean;
     supportSlope: number | undefined;
 };
 
-export function getPlayerBoxContacts(scene: Scene, location: vec3, eyeHeight: number, playerHalfWidth: number, headClearance = 0) {
+export function getPlayerBoxContacts(
+    scene: Scene, location: vec3, eyeHeight: number, playerHalfWidth: number, headClearance = 0,
+    unsupportedBox: Entity | null = null
+) {
     const boxes: BoxContact[] = [];
     for (const entity of scene.getEntitiesByComponent(BoxCollider)) {
         const transform = entity.getComponent(Transform);
@@ -136,14 +141,15 @@ export function getPlayerBoxContacts(scene: Scene, location: vec3, eyeHeight: nu
         const box = getBoxBounds(transform, eyeHeight, playerHalfWidth, headClearance);
         const [x, , z] = vec3.rotateY([0, 0, 0], location, box.center, -box.yaw);
         const surface = getBoxSection(box.planes, 0, z - box.center[2]);
+        const supportsPlayer = entity !== unsupportedBox;
         let supportSlope: number | undefined;
-        if (surface && isInside(x, box.xRange) &&
+        if (supportsPlayer && surface && isInside(x, box.xRange) &&
             Math.abs(location[1] - box.center[1] - surface.max) <= collisionEpsilon) {
             const [normalY, normalZ] = surface.upperPlane;
             // The expanded collider has a flat strip at the edge of an inclined face.
             supportSlope = Math.abs(normalZ) <= collisionEpsilon ? box.pitch : Math.atan2(normalZ, normalY);
         }
-        boxes.push({ ...box, x, z, supportSlope });
+        boxes.push({ ...box, x, z, supportsPlayer, supportSlope });
     }
     return boxes;
 }
@@ -174,7 +180,7 @@ export function resolvePlayerBoxMovement(boxes: BoxContact[], location: vec3, ne
         const section = getBoxSection(box.planes, 0, z - box.center[2]);
         if (!section) continue;
         const top = box.center[1] + section.max;
-        if (box.supportSlope !== undefined || location[1] >= top - collisionEpsilon) {
+        if (box.supportsPlayer && (box.supportSlope !== undefined || location[1] >= top - collisionEpsilon)) {
             groundEyeY = Math.max(groundEyeY, top);
             followsSurface ||= box.supportSlope !== undefined;
         }
