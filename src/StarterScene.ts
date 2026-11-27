@@ -1,5 +1,6 @@
 import { mat4, quat, vec3 } from "gl-matrix";
 import { BoxCollider } from "./components/BoxCollider.ts";
+import { Carryable } from "./components/Carryable.ts";
 import { Camera } from "./components/Camera.ts";
 import { Mesh } from "./components/Mesh.ts";
 import { Transform, TransformType } from "./components/Transform.ts";
@@ -51,6 +52,7 @@ function addMapBox(scene: Scene, name: string, meshTransform: Transform, [min, m
     collider.addComponent(transform);
     collider.addComponent(new BoxCollider());
     scene.addEntity(collider);
+    return transform;
 }
 
 function addMapColliders(scene: Scene) {
@@ -60,7 +62,9 @@ function addMapColliders(scene: Scene) {
         const bounds = getMeshBounds(mesh);
         if (!meshTransform || !bounds) continue;
 
-        addMapBox(scene, `${entity.name} collider`, meshTransform, bounds);
+        const collider = addMapBox(scene, `${entity.name} collider`, meshTransform, bounds);
+        const carryable = entity.getComponent(Carryable);
+        if (carryable) carryable.collider = collider;
     }
 }
 

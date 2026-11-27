@@ -12,6 +12,7 @@ import { computeSkins } from "./systems/SkinningSystem.ts";
 import { createStarterScene } from "./StarterScene.ts";
 import { getWorldBoxBounds } from "./systems/BoxCollisionSystem.ts";
 import { initializeCameraControls, updateGame } from "./systems/GameSystem.ts";
+import { getCubeInteractionTarget } from "./systems/CubeCarrySystem.ts";
 
 
 // ------ Create sample scene ------ //
@@ -86,7 +87,6 @@ resize();
 
 const interactionHint = document.getElementById("interaction-hint");
 const interactionAction = document.getElementById("interaction-action");
-const cubeCollider = scene.getEntityByName("CUBE collider")?.getComponent(Transform);
 const renderCameraEntity = scene.getEntitiesByComponent(Camera)[0];
 const renderCamera = renderCameraEntity?.getComponent(Camera);
 const renderCameraTransform = renderCameraEntity?.getComponent(Transform);
@@ -96,6 +96,7 @@ let lastCubeAction: ReturnType<typeof updateGame>;
 
 function updateInteractionHint(cubeAction: ReturnType<typeof updateGame>) {
     if (!interactionHint || !interactionAction) return;
+    const cubeCollider = getCubeInteractionTarget(scene);
     const view = renderCameraTransform?.viewMatrix;
     if (!cubeAction || !cubeCollider || !renderCamera || !view) {
         interactionHint.hidden = true;
