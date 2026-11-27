@@ -1,10 +1,11 @@
 import { vec3 } from "gl-matrix";
 import { Transform } from "../components/Transform.ts";
 import type { Scene } from "../Scene.ts";
-import { getPlayerBoxContacts, resolvePlayerBoxMovement } from "./BoxCollisionSystem.ts";
+import { getPlayerBoxContacts, resolvePlayerBoxMovement, tryPlayerStep } from "./BoxCollisionSystem.ts";
 import { getHeldCubeCollider, updateCubeCarry } from "./CubeCarrySystem.ts";
 
 const cameraSpeed = 7;
+const maxStepHeight = 0.12;
 const maxWalkableSlope = Math.PI / 6;
 const slideSpeed = 3;
 export const playerEyeHeight = 1.7;
@@ -145,8 +146,16 @@ function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
         vec3.scaleAndAdd(next, location, downhill, slideSpeed * dt);
     }
 
+    const desired = grounded && verticalVelocity === 0 && !jumpRequested ? vec3.copy([0, 0, 0], next) : null;
     const surfaces = resolvePlayerBoxMovement(boxes, location, next);
-    next[1] = updateVerticalPosition(location[1], grounded, surfaces, dt);
+    const stepped = desired && (desired[0] !== next[0] || desired[2] !== next[2])
+        ? tryPlayerStep(boxes, location, desired, maxStepHeight, slopeLimit)
+        : undefined;
+    if (stepped) {
+        vec3.copy(next, stepped);
+    } else {
+        next[1] = updateVerticalPosition(location[1], grounded, surfaces, dt);
+    }
     const offset = vec3.subtract([0, 0, 0], next, location);
     if (offset[0] === 0 && offset[1] === 0 && offset[2] === 0) return;
 
