@@ -218,6 +218,7 @@ export interface MeshPrimitive {
 }
  
 export interface Node {
+    extras?: { [key: string]: unknown };
     camera?: number;
     children?: number[];
     skin?: number;

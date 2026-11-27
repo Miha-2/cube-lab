@@ -6,3 +6,5 @@ dist/
 
 AGENTS.md
 *.blend1
+
+.DS_Store

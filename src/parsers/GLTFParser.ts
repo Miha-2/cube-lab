@@ -1,5 +1,6 @@
 import { mat4, quat, vec3, vec4 } from "gl-matrix";
 import { Transform, TransformType } from "../components/Transform.ts";
+import { Carryable } from "../components/Carryable.ts";
 import { BasicMaterial, Material } from "../data/Material.ts";
 import { Entity } from "../Entity.ts";
 import { Scene } from "../Scene.ts";
@@ -171,6 +172,9 @@ export class GLTFParser {
             const mesh = await this.parseMesh(nodeSpec.mesh);
             if (mesh) {
                 nodeEntity.addComponent(mesh);
+                if (nodeSpec.extras?.game_type === "cube") {
+                    nodeEntity.addComponent(new Carryable());
+                }
             }
         }
         

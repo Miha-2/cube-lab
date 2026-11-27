@@ -12,6 +12,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "build": "tsc",
+    "test:cube-carry": "npm run build && node tests/cube-carry.mjs",
     "watch": "tsc --watch",
     "serve": "serve -l 3000 .",
     "dev": "vite",

@@ -1,5 +1,6 @@
-import { vec3 } from "gl-matrix";
+import { mat4, quat, vec3 } from "gl-matrix";
 import { BoxCollider } from "./components/BoxCollider.ts";
+import { Carryable } from "./components/Carryable.ts";
 import { Camera } from "./components/Camera.ts";
 import { Mesh } from "./components/Mesh.ts";
 import { Transform, TransformType } from "./components/Transform.ts";
@@ -7,6 +8,7 @@ import { Entity } from "./Entity.ts";
 import { GLTFParser } from "./parsers/GLTFParser.ts";
 import type { Scene } from "./Scene.ts";
 import { playerEyeHeight } from "./systems/GameSystem.ts";
+import { computeTransforms } from "./systems/TransformSystem.ts";
 
 type Point = [number, number, number];
 type Bounds = [min: Point, max: Point];
@@ -30,22 +32,27 @@ function getMeshBounds(mesh: Mesh): Bounds | undefined {
 }
 
 function addMapBox(scene: Scene, name: string, meshTransform: Transform, [min, max]: Bounds) {
+    // Imported meshes can be nested under positioned and rotated asset roots.
+    const worldPosition = mat4.getTranslation(vec3.create(), meshTransform.worldMatrix);
+    const worldRotation = mat4.getRotation(quat.create(), meshTransform.worldMatrix);
+    const worldScale = mat4.getScaling(vec3.create(), meshTransform.worldMatrix);
     const center = vec3.lerp([0, 0, 0], min, max, 0.5);
-    vec3.multiply(center, center, meshTransform.scale);
-    vec3.transformQuat(center, center, meshTransform.rotation);
+    vec3.multiply(center, center, worldScale);
+    vec3.transformQuat(center, center, worldRotation);
 
     const halfSize = vec3.subtract([0, 0, 0], max, min);
     vec3.scale(halfSize, halfSize, 0.5);
     const transform = new Transform(TransformType.Free);
-    transform.location = vec3.add(center, center, meshTransform.location);
-    transform.rotation = meshTransform.rotation;
-    transform.scale = vec3.multiply(halfSize, halfSize, meshTransform.scale);
+    transform.location = vec3.add(center, center, worldPosition);
+    transform.rotation = worldRotation;
+    transform.scale = vec3.multiply(halfSize, halfSize, worldScale);
 
     const collider = new Entity();
     collider.name = name;
     collider.addComponent(transform);
     collider.addComponent(new BoxCollider());
     scene.addEntity(collider);
+    return transform;
 }
 
 function addMapColliders(scene: Scene) {
@@ -55,32 +62,35 @@ function addMapColliders(scene: Scene) {
         const bounds = getMeshBounds(mesh);
         if (!meshTransform || !bounds) continue;
 
-        addMapBox(scene, `${entity.name} collider`, meshTransform, bounds);
+        const collider = addMapBox(scene, `${entity.name} collider`, meshTransform, bounds);
+        const carryable = entity.getComponent(Carryable);
+        if (carryable) carryable.collider = collider;
     }
 }
 
 export async function createStarterScene() {
-    const response = await fetch("data/map/mapa.gltf");
+    const response = await fetch("data/map_new/map.glb");
     if (!response.ok) {
         throw Error(`Could not load map: ${response.status} ${response.statusText}`);
     }
     const parser = new GLTFParser();
-    await parser.setJson(await response.text(), "data/map/");
+    await parser.setBinary(new Uint8Array(await response.arrayBuffer()));
     const scene = await parser.parseScene(parser.data.scene ?? 0);
     if (!scene) {
         throw Error("The exported map does not contain a playable scene.");
     }
+    computeTransforms(scene);
     addMapColliders(scene);
 
-    const floor = scene.getEntityByName("floor collider") ?? scene.getEntityByName("Cube collider");
-    const floorCollider = floor?.getComponent(Transform);
-    if (!floorCollider) throw Error("The map is missing its floor collider.");
-    const spawnY = floorCollider.location[1] + Math.abs(floorCollider.scale[1]) + playerEyeHeight;
+    const spawn = scene.getEntityByName("R01_PlayerSpawn")?.getComponent(Transform);
+    if (!spawn) throw Error("The map is missing its R01_PlayerSpawn marker.");
+    const spawnPosition = mat4.getTranslation(vec3.create(), spawn.worldMatrix);
+    spawnPosition[1] += playerEyeHeight;
     const camera = new Entity();
     camera.name = "PlayerCamera";
     const cameraTransform = new Transform(TransformType.LookAt);
-    cameraTransform.location = [0, spawnY, 0];
-    cameraTransform.target = [6, spawnY, 0];
+    cameraTransform.location = spawnPosition;
+    cameraTransform.target = vec3.add(vec3.create(), spawnPosition, [0, 0, -1]);
     cameraTransform.up = [0, 1, 0];
     camera.addComponent(cameraTransform);
     camera.addComponent(new Camera(1, Math.PI / 3, 0.1, 100));
