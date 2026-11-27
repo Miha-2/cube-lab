@@ -1,4 +1,4 @@
-import { vec3 } from "gl-matrix";
+import { mat4, quat, vec3 } from "gl-matrix";
 import { BoxCollider } from "../components/BoxCollider.ts";
 import { Transform } from "../components/Transform.ts";
 import type { Scene } from "../Scene.ts";
@@ -8,6 +8,27 @@ const collisionEpsilon = 1e-8;
 type Interval = [min: number, max: number];
 type BoxPlane = [normalY: number, normalZ: number, limit: number];
 export type BoxBounds = { min: vec3; max: vec3 };
+
+/** Keep world-space physics boxes aligned with their Blender proxy hierarchies. */
+export function syncBoxColliders(scene: Scene) {
+    for (const entity of scene.getEntitiesByComponent(BoxCollider)) {
+        const source = entity.getComponent(BoxCollider)!.source;
+        const transform = entity.getComponent(Transform);
+        if (!source || !transform) continue;
+        transform.location = mat4.getTranslation(vec3.create(), source.worldMatrix);
+        const scale = mat4.getScaling(vec3.create(), source.worldMatrix);
+        // Remove scale from each matrix column before extracting the rotation.
+        // Otherwise a rotated, non-uniformly scaled box can produce a non-unit quaternion.
+        const rotationMatrix = mat4.clone(source.worldMatrix);
+        for (let column = 0; column < 3; column++) {
+            for (let row = 0; row < 3; row++) {
+                rotationMatrix[column * 4 + row] /= scale[column] || 1;
+            }
+        }
+        transform.rotation = quat.normalize(quat.create(), mat4.getRotation(quat.create(), rotationMatrix));
+        transform.scale = scale;
+    }
+}
 
 /** World-aligned bounds for sweeping a movable box against the scene. */
 export function getWorldBoxBounds(transform: Transform): BoxBounds {
@@ -149,7 +170,10 @@ export function getPlayerBoxContacts(scene: Scene, location: vec3, eyeHeight: nu
 }
 
 /** Clips the horizontal position and finds the nearest surfaces below and above it. */
-export function resolvePlayerBoxMovement(boxes: BoxContact[], location: vec3, next: vec3) {
+export function resolvePlayerBoxMovement(boxes: BoxContact[], location: vec3, next: vec3, maxStepHeight = 0): {
+    groundEyeY: number; ceilingEyeY: number; followsSurface: boolean;
+} {
+    const desired = vec3.clone(next);
     for (const box of boxes) {
         const horizontalSection = getBoxSection(box.planes, 1, location[1] - box.center[1]);
         if (!horizontalSection || box.supportSlope !== undefined) continue;
@@ -181,6 +205,36 @@ export function resolvePlayerBoxMovement(boxes: BoxContact[], location: vec3, ne
         const bottom = box.center[1] + section.min;
         if (location[1] <= bottom + collisionEpsilon) {
             ceilingEyeY = Math.min(ceilingEyeY, bottom);
+        }
+    }
+    if (maxStepHeight > 0 && (next[0] !== desired[0] || next[2] !== desired[2])) {
+        const heights: number[] = [];
+        for (const box of boxes) {
+            if (Math.abs(box.pitch) > collisionEpsilon) continue;
+            const [x, , z] = vec3.rotateY(vec3.create(), desired, box.center, -box.yaw);
+            if (!isInside(x, box.xRange)) continue;
+            const section = getBoxSection(box.planes, 0, z - box.center[2]);
+            if (!section) continue;
+            const top = box.center[1] + section.max;
+            const rise = top - location[1];
+            if (rise > collisionEpsilon && rise <= maxStepHeight + 1e-6) heights.push(top);
+        }
+        for (const top of heights.sort((a, b) => a - b)) {
+            const raised = vec3.fromValues(location[0], top + 1e-6, location[2]);
+            const blockedAbove = boxes.some(box => {
+                const section = getBoxSection(box.planes, 0, box.z - box.center[2]);
+                if (!section || !isInside(box.x, box.xRange)) return false;
+                const bottom = box.center[1] + section.min;
+                return bottom >= location[1] - collisionEpsilon && bottom < raised[1];
+            });
+            if (blockedAbove) continue;
+            const trial = vec3.fromValues(desired[0], raised[1], desired[2]);
+            const surfaces = resolvePlayerBoxMovement(boxes, raised, trial);
+            if (Math.hypot(trial[0] - desired[0], trial[2] - desired[2]) > 1e-6 ||
+                surfaces.ceilingEyeY < raised[1] ||
+                Math.abs(surfaces.groundEyeY - top) > 1e-5) continue;
+            vec3.copy(next, trial);
+            return { ...surfaces, followsSurface: true };
         }
     }
     return { groundEyeY, ceilingEyeY, followsSurface };

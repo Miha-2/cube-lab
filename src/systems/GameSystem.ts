@@ -1,8 +1,9 @@
 import { vec3 } from "gl-matrix";
 import { Transform } from "../components/Transform.ts";
 import type { Scene } from "../Scene.ts";
-import { getPlayerBoxContacts, resolvePlayerBoxMovement } from "./BoxCollisionSystem.ts";
+import { getPlayerBoxContacts, resolvePlayerBoxMovement, syncBoxColliders } from "./BoxCollisionSystem.ts";
 import { updateCubeCarry } from "./CubeCarrySystem.ts";
+import { computeTransforms } from "./TransformSystem.ts";
 
 const cameraSpeed = 7;
 const maxWalkableSlope = Math.PI / 6;
@@ -144,7 +145,8 @@ function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
         vec3.scaleAndAdd(next, location, downhill, slideSpeed * dt);
     }
 
-    const surfaces = resolvePlayerBoxMovement(boxes, location, next);
+    const canStep = grounded && verticalVelocity === 0 && !jumpRequested;
+    const surfaces = resolvePlayerBoxMovement(boxes, location, next, canStep ? 0.2 : 0);
     next[1] = updateVerticalPosition(location[1], grounded, surfaces, dt);
     const offset = vec3.subtract([0, 0, 0], next, location);
     if (offset[0] === 0 && offset[1] === 0 && offset[2] === 0) return;
@@ -156,6 +158,8 @@ function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
 
 /** Updates game logic once per frame. Delta time is in seconds. */
 export function updateGame(scene: Scene, dt: number) {
+    computeTransforms(scene);
+    syncBoxColliders(scene);
     const transform = scene.getEntityByName("PlayerCamera")?.getComponent(Transform);
     if (!transform) return;
 

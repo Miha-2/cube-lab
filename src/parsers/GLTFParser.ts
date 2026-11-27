@@ -1,6 +1,7 @@
 import { mat4, quat, vec3, vec4 } from "gl-matrix";
 import { Transform, TransformType } from "../components/Transform.ts";
 import { Carryable } from "../components/Carryable.ts";
+import { BoxCollider } from "../components/BoxCollider.ts";
 import { BasicMaterial, Material } from "../data/Material.ts";
 import { Entity } from "../Entity.ts";
 import { Scene } from "../Scene.ts";
@@ -168,7 +169,9 @@ export class GLTFParser {
         const nodeEntity = new Entity();
         nodeEntity.name = nodeSpec.name ?? null;
 
-        if (nodeSpec.mesh !== undefined) {
+        const collisionOnly = nodeSpec.extras?.collision_type === "box";
+        if (collisionOnly) nodeEntity.addComponent(new BoxCollider());
+        if (nodeSpec.mesh !== undefined && !collisionOnly) {
             const mesh = await this.parseMesh(nodeSpec.mesh);
             if (mesh) {
                 nodeEntity.addComponent(mesh);

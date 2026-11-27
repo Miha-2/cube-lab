@@ -27,6 +27,11 @@ let scene = await parser.parseScene(parser.data.scene ?? 0);
 assert.equal(scene.getEntitiesByComponent(Carryable).length, 1);
 assert(scene.getEntityByName('NameDoesNotControlPickup').getComponent(Carryable));
 // Exercise the real map loader and its direct entity-to-collider association.
+// Add a collision proxy to old exports, without changing the file on disk.
+const proxyName = 'Test_Cube_CollisionProxy';
+const proxyIndex = parser.data.nodes.length;
+parser.data.nodes.push({ name: proxyName, scale: [.5, .5, .5], extras: { collision_type: 'box' } });
+cubeNode.children = [...(cubeNode.children ?? []), proxyIndex];
 const oldJsonLength = new DataView(bytes.buffer, bytes.byteOffset).getUint32(12, true);
 const json = new TextEncoder().encode(JSON.stringify(parser.data));
 const padded = new Uint8Array(Math.ceil(json.length / 4) * 4).fill(32); padded.set(json);
@@ -39,7 +44,7 @@ const { createStarterScene } = await import('../dist/StarterScene.js');
 const imported = await createStarterScene();
 const importedCube = imported.getEntityByName('NameDoesNotControlPickup');
 assert.equal(importedCube.getComponent(Carryable).collider,
-    imported.getEntityByName('NameDoesNotControlPickup collider').getComponent(Transform));
+    imported.getEntityByName(`${proxyName} physics`).getComponent(Transform));
 const plain = new GLTFParser();
 await plain.setJson(JSON.stringify({ asset: { version: '2.0' }, scenes: [{ nodes: [0] }], nodes: [{ name: 'CUBE' }] }), './');
 assert.equal((await plain.parseScene(0)).getEntitiesByComponent(Carryable).length, 0);

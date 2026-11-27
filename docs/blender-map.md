@@ -17,4 +17,20 @@ Export `data/map_new/map.blend` to `data/map_new/map.glb` with **Include > Custo
 The importer reads the exported glTF `extras.game_type` and adds the `Carryable` component.
 Other objects, including objects merely named `CUBE`, are not automatically carryable.
 
-Run `npm run test:cube-carry` to check property import and pickup behavior.
+Collision boxes live in the `R01_Collision` collection. Each is a unit-box mesh
+with the string property `collision_type = box`. Resize them using object scale,
+not Edit Mode: their scale provides the collision half-extents. Parent a box to
+its moving visual object (cube, door leaf, or pressure-plate button).
+
+The game omits these helper meshes from rendering. Ordinary visible meshes,
+including lights and cables, do not automatically collide. The door frame uses
+three boxes so its opening stays clear when the leaves move.
+
+When exporting, enable **Custom Properties** and **Active Scene**, and leave
+**Selected Objects**, **Visible Objects**, and **Renderable Objects** unchecked.
+Collision helpers are hidden from Blender renders but must still be exported.
+The player can automatically step onto flat obstacles up to 0.2 m high when
+grounded, provided there is enough headroom.
+
+After building, `node tests/cube-carry.mjs` checks pickup and
+`node tests/box-collision.mjs` checks stepping.
