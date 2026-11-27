@@ -1,6 +1,138 @@
+import { vec3 } from "gl-matrix";
+import { Transform } from "../components/Transform.ts";
 import type { Scene } from "../Scene.ts";
+import { getPlayerBoxContacts, resolvePlayerBoxMovement } from "./BoxCollisionSystem.ts";
+
+const cameraSpeed = 7;
+const maxWalkableSlope = Math.PI / 6;
+const slideSpeed = 3;
+const eyeHeight = 1.7;
+const playerHalfWidth = 0.3;
+const gravity = 9.81;
+const jumpSpeed = 6.3;
+const mouseSensitivity = 0.002;
+const pitchLimit = Math.PI / 2 - 0.01;
+const heldKeys = new Set<string>();
+let mouseX = 0;
+let mouseY = 0;
+let jumpRequested = false;
+let verticalVelocity = 0;
+
+function clearMouseMovement() {
+    mouseX = 0;
+    mouseY = 0;
+}
+
+window.addEventListener("keydown", (event) => {
+    heldKeys.add(event.code);
+    if (event.code === "Space" && !event.repeat) jumpRequested = true;
+});
+window.addEventListener("keyup", (event) => heldKeys.delete(event.code));
+window.addEventListener("blur", () => {
+    heldKeys.clear();
+    jumpRequested = false;
+    clearMouseMovement();
+});
+
+export function initializeCameraControls(canvas: HTMLCanvasElement) {
+    canvas.addEventListener("click", async () => {
+        if (document.pointerLockElement === canvas) return;
+
+        try {
+            await canvas.requestPointerLock();
+        } catch (error) {
+            console.warn("Could not capture the mouse:", error);
+        }
+    });
+
+    document.addEventListener("pointerlockchange", clearMouseMovement);
+
+    document.addEventListener("mousemove", (event) => {
+        if (document.pointerLockElement !== canvas) return;
+
+        // Collect mouse movement between frames.
+        mouseX += event.movementX;
+        mouseY += event.movementY;
+    });
+}
+
+function updateCameraLook(transform: Transform) {
+    if (mouseX === 0 && mouseY === 0) return;
+
+    const [x, y, z] = vec3.subtract(vec3.create(), transform.target, transform.location);
+    const yaw = Math.atan2(x, -z) + mouseX * mouseSensitivity;
+    const nextPitch = Math.atan2(y, Math.hypot(x, z)) - mouseY * mouseSensitivity;
+    // Keep the view direction from lining up with the up axis.
+    const pitch = Math.max(-pitchLimit, Math.min(pitchLimit, nextPitch));
+    clearMouseMovement();
+
+    const forward: vec3 = [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
+    transform.target = vec3.add(vec3.create(), transform.location, forward);
+}
+
+function updateVerticalPosition(cameraY: number, groundEyeY: number, grounded: boolean, followsSurface: boolean, dt: number) {
+    const isJumping = jumpRequested && grounded && verticalVelocity === 0;
+    jumpRequested = false;
+    if (isJumping) {
+        verticalVelocity = jumpSpeed;
+    } else if (followsSurface && verticalVelocity === 0) {
+        return groundEyeY;
+    }
+
+    const nextY = cameraY + verticalVelocity * dt - 0.5 * gravity * dt * dt;
+    verticalVelocity -= gravity * dt;
+
+    // Stop falling when the player's feet reach a surface.
+    if (nextY <= groundEyeY) {
+        verticalVelocity = 0;
+        return groundEyeY;
+    }
+    return nextY;
+}
+
+function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
+    if (dt <= 0) return;
+
+    const forwardInput = Number(heldKeys.has("KeyW")) - Number(heldKeys.has("KeyS"));
+    const rightInput = Number(heldKeys.has("KeyD")) - Number(heldKeys.has("KeyA"));
+
+    // Project the view direction onto the horizontal plane for WASD.
+    const forward = vec3.subtract([0, 0, 0], transform.target, transform.location);
+    forward[1] = 0;
+    vec3.normalize(forward, forward);
+    const right: vec3 = [-forward[2], 0, forward[0]];
+
+    const step = cameraSpeed * dt;
+    const location = transform.location;
+    const next = vec3.scaleAndAdd([0, 0, 0], location, forward, forwardInput * step);
+    vec3.scaleAndAdd(next, next, right, rightInput * step);
+
+    const boxes = getPlayerBoxContacts(scene, location, eyeHeight, playerHalfWidth);
+    const slopeLimit = maxWalkableSlope + 1e-6;
+    const grounded = boxes.some(({ supportSlope }) => supportSlope !== undefined && Math.abs(supportSlope) <= slopeLimit);
+    const steepBox = boxes.find(({ supportSlope }) => supportSlope !== undefined && Math.abs(supportSlope) > slopeLimit);
+    if (!grounded && steepBox?.supportSlope !== undefined) {
+        // Follow the steep face downhill using its local Z direction in world space.
+        const sign = Math.sign(steepBox.supportSlope);
+        const downhill: vec3 = [Math.sin(steepBox.yaw) * sign, 0, Math.cos(steepBox.yaw) * sign];
+        vec3.scaleAndAdd(next, location, downhill, slideSpeed * dt);
+    }
+
+    const { groundEyeY, followsSurface } = resolvePlayerBoxMovement(boxes, location, next);
+    next[1] = updateVerticalPosition(location[1], groundEyeY, grounded, followsSurface, dt);
+    const offset = vec3.subtract([0, 0, 0], next, location);
+    if (offset[0] === 0 && offset[1] === 0 && offset[2] === 0) return;
+
+    // Move the look target with the camera to preserve its direction.
+    transform.location = next;
+    transform.target = vec3.add([0, 0, 0], transform.target, offset);
+}
 
 /** Updates game logic once per frame. Delta time is in seconds. */
-export function updateGame(_scene: Scene, _dt: number): void {
-    // Add game mechanics here as they are implemented.
+export function updateGame(scene: Scene, dt: number): void {
+    const transform = scene.getEntityByName("PlayerCamera")?.getComponent(Transform);
+    if (!transform) return;
+
+    updateCameraLook(transform);
+    updateCameraMovement(scene, transform, dt);
 }
