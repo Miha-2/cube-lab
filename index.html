@@ -48,11 +48,35 @@
         width: 2px;
         height: 14px;
       }
+
+      .interaction-hint {
+        position: fixed;
+        transform: translate(-50%, calc(-100% - 8px));
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: rgba(12, 16, 22, 0.85);
+        color: white;
+        font: 500 14px/1.4 system-ui, sans-serif;
+        pointer-events: none;
+      }
+
+      .interaction-hint kbd {
+        display: inline-block;
+        margin-right: 5px;
+        padding: 0 5px;
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        border-radius: 3px;
+        font: inherit;
+        font-weight: 700;
+      }
     </style>
   </head>
   <body>
     <canvas id="canvas"></canvas>
     <div class="crosshair" aria-hidden="true"></div>
+    <div id="interaction-hint" class="interaction-hint" hidden>
+      <kbd>E</kbd> <span id="interaction-action">Poberi</span>
+    </div>
     <script type="importmap">
       {
         "imports": {

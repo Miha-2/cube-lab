@@ -7,6 +7,64 @@ const collisionEpsilon = 1e-8;
 
 type Interval = [min: number, max: number];
 type BoxPlane = [normalY: number, normalZ: number, limit: number];
+export type BoxBounds = { min: vec3; max: vec3 };
+
+/** World-aligned bounds for sweeping a movable box against the scene. */
+export function getWorldBoxBounds(transform: Transform): BoxBounds {
+    const x = vec3.transformQuat([0, 0, 0], [transform.scale[0], 0, 0], transform.rotation);
+    const y = vec3.transformQuat([0, 0, 0], [0, transform.scale[1], 0], transform.rotation);
+    const z = vec3.transformQuat([0, 0, 0], [0, 0, transform.scale[2]], transform.rotation);
+    const halfSize: vec3 = [
+        Math.abs(x[0]) + Math.abs(y[0]) + Math.abs(z[0]),
+        Math.abs(x[1]) + Math.abs(y[1]) + Math.abs(z[1]),
+        Math.abs(x[2]) + Math.abs(y[2]) + Math.abs(z[2]),
+    ];
+    return {
+        min: vec3.subtract([0, 0, 0], transform.location, halfSize),
+        max: vec3.add([0, 0, 0], transform.location, halfSize),
+    };
+}
+
+/** First contact for an origin outside the box moving along a unit direction. */
+export function getBoxHitDistance(origin: vec3, direction: vec3, { min, max }: BoxBounds, reach: number) {
+    let entry = -Infinity;
+    let exit = Infinity;
+    for (let axis = 0; axis < 3; axis++) {
+        if (Math.abs(direction[axis]) <= collisionEpsilon) {
+            if (origin[axis] <= min[axis] + collisionEpsilon || origin[axis] >= max[axis] - collisionEpsilon) return;
+            continue;
+        }
+        const near = (min[axis] - origin[axis]) / direction[axis];
+        const far = (max[axis] - origin[axis]) / direction[axis];
+        entry = Math.max(entry, Math.min(near, far));
+        exit = Math.min(exit, Math.max(near, far));
+    }
+    if (entry >= -collisionEpsilon && entry <= reach && exit > Math.max(0, entry)) {
+        return Math.max(0, entry);
+    }
+}
+
+export function clipMovingBox(location: vec3, target: vec3, halfSize: vec3, obstacles: BoxBounds[]) {
+    const next = vec3.copy([0, 0, 0], location);
+    const direction: vec3 = [0, 0, 0];
+    const expandedObstacles = obstacles.map(({ min, max }) => ({
+        min: vec3.subtract([0, 0, 0], min, halfSize),
+        max: vec3.add([0, 0, 0], max, halfSize),
+    }));
+    // Resolve each axis separately so a box can slide along walls and along the floor.
+    for (const axis of [0, 2, 1] as const) {
+        const travel = target[axis] - next[axis];
+        if (travel === 0) continue;
+        direction[axis] = Math.sign(travel);
+        let distance = Math.abs(travel);
+        for (const obstacle of expandedObstacles) {
+            distance = getBoxHitDistance(next, direction, obstacle, distance) ?? distance;
+        }
+        next[axis] += direction[axis] * distance;
+        direction[axis] = 0;
+    }
+    return next;
+}
 
 function isInside(value: number, [min, max]: Interval) {
     return value > min + collisionEpsilon && value < max - collisionEpsilon;

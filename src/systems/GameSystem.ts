@@ -2,6 +2,7 @@ import { vec3 } from "gl-matrix";
 import { Transform } from "../components/Transform.ts";
 import type { Scene } from "../Scene.ts";
 import { getPlayerBoxContacts, resolvePlayerBoxMovement } from "./BoxCollisionSystem.ts";
+import { updateCubeCarry } from "./CubeCarrySystem.ts";
 
 const cameraSpeed = 7;
 const maxWalkableSlope = Math.PI / 6;
@@ -17,6 +18,7 @@ const heldKeys = new Set<string>();
 let mouseX = 0;
 let mouseY = 0;
 let jumpRequested = false;
+let interactRequested = false;
 let verticalVelocity = 0;
 
 function clearMouseMovement() {
@@ -27,11 +29,13 @@ function clearMouseMovement() {
 window.addEventListener("keydown", (event) => {
     heldKeys.add(event.code);
     if (event.code === "Space" && !event.repeat) jumpRequested = true;
+    if (event.code === "KeyE" && !event.repeat) interactRequested = true;
 });
 window.addEventListener("keyup", (event) => heldKeys.delete(event.code));
 window.addEventListener("blur", () => {
     heldKeys.clear();
     jumpRequested = false;
+    interactRequested = false;
     clearMouseMovement();
 });
 
@@ -151,10 +155,18 @@ function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
 }
 
 /** Updates game logic once per frame. Delta time is in seconds. */
-export function updateGame(scene: Scene, dt: number): void {
+export function updateGame(scene: Scene, dt: number) {
     const transform = scene.getEntityByName("PlayerCamera")?.getComponent(Transform);
     if (!transform) return;
 
     updateCameraLook(transform);
     updateCameraMovement(scene, transform, dt);
+
+    const [x, y, z] = transform.location;
+    const cubeAction = updateCubeCarry(scene, transform, {
+        min: [x - playerHalfWidth, y - playerEyeHeight, z - playerHalfWidth],
+        max: [x + playerHalfWidth, y + headClearance, z + playerHalfWidth],
+    }, interactRequested, dt);
+    interactRequested = false;
+    return cubeAction;
 }
