@@ -155,7 +155,7 @@ function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
 }
 
 /** Updates game logic once per frame. Delta time is in seconds. */
-export function updateGame(scene: Scene, dt: number): void {
+export function updateGame(scene: Scene, dt: number) {
     const transform = scene.getEntityByName("PlayerCamera")?.getComponent(Transform);
     if (!transform) return;
 
@@ -163,9 +163,10 @@ export function updateGame(scene: Scene, dt: number): void {
     updateCameraMovement(scene, transform, dt);
 
     const [x, y, z] = transform.location;
-    updateCubeCarry(scene, transform, {
+    const cubeAction = updateCubeCarry(scene, transform, {
         min: [x - playerHalfWidth, y - playerEyeHeight, z - playerHalfWidth],
         max: [x + playerHalfWidth, y + headClearance, z + playerHalfWidth],
     }, interactRequested, dt);
     interactRequested = false;
+    return cubeAction;
 }

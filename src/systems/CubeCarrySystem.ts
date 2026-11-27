@@ -9,7 +9,7 @@ const carryDistance = 1.65;
 const gravity = 9.81;
 const carryStates = new WeakMap<Scene, { held: boolean; fallSpeed: number }>();
 
-export function updateCubeCarry(scene: Scene, camera: Transform, playerBounds: BoxBounds, interact: boolean, dt: number) {
+export function updateCubeCarry(scene: Scene, camera: Transform, playerBounds: BoxBounds, interact: boolean, dt: number): "pickup" | "drop" | undefined {
     const cube = scene.getEntityByName("CUBE")?.getComponent(Transform);
     const colliderEntity = scene.getEntityByName("CUBE collider");
     const collider = colliderEntity?.getComponent(Transform);
@@ -31,18 +31,16 @@ export function updateCubeCarry(scene: Scene, camera: Transform, playerBounds: B
     const forward = vec3.subtract([0, 0, 0], camera.target, camera.location);
     vec3.normalize(forward, forward);
     const bounds = getWorldBoxBounds(collider);
+    const hit = state.held ? undefined : getBoxHitDistance(camera.location, forward, bounds, pickupReach);
+    const canPickUp = hit !== undefined && !obstacles.some((box) =>
+        getBoxHitDistance(camera.location, forward, box, hit) !== undefined);
     if (interact) {
-        if (state.held) {
-            state.held = false;
-        } else {
-            const hit = getBoxHitDistance(camera.location, forward, bounds, pickupReach);
-            state.held = hit !== undefined && !obstacles.some((box) =>
-                getBoxHitDistance(camera.location, forward, box, hit) !== undefined);
-        }
+        state.held = canPickUp;
         if (state.held) state.fallSpeed = 0;
     }
 
-    if (dt <= 0) return;
+    const hint = state.held ? "drop" : canPickUp ? "pickup" : undefined;
+    if (dt <= 0) return hint;
     const location = collider.location;
     const target = state.held
         ? vec3.scaleAndAdd([0, 0, 0], camera.location, forward, carryDistance)
@@ -59,7 +57,8 @@ export function updateCubeCarry(scene: Scene, camera: Transform, playerBounds: B
     if (!state.held && next[1] > target[1]) state.fallSpeed = 0;
 
     const offset = vec3.subtract([0, 0, 0], next, location);
-    if (offset[0] === 0 && offset[1] === 0 && offset[2] === 0) return;
+    if (offset[0] === 0 && offset[1] === 0 && offset[2] === 0) return hint;
     collider.location = next;
     cube.location = vec3.add([0, 0, 0], cube.location, offset);
+    return hint;
 }

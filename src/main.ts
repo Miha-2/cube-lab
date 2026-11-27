@@ -81,6 +81,9 @@ resize();
 
 // ------ Start game loop ------ //
 
+const interactionHint = document.getElementById("interaction-hint");
+const interactionAction = document.getElementById("interaction-action");
+let lastCubeAction: ReturnType<typeof updateGame>;
 let lastTime = performance.now();
 function update(timestamp: number) {
     if (!scene) {
@@ -91,7 +94,12 @@ function update(timestamp: number) {
     lastTime = timestamp;
 
     animateScene(scene, dt);
-    updateGame(scene, dt);
+    const cubeAction = updateGame(scene, dt);
+    if (cubeAction !== lastCubeAction && interactionHint && interactionAction) {
+        interactionHint.hidden = cubeAction === undefined;
+        interactionAction.textContent = cubeAction === "drop" ? "Odloži" : "Poberi";
+        lastCubeAction = cubeAction;
+    }
     computeTransforms(scene);
     computeSkins(scene);
     updateBuffers(renderState, scene);
