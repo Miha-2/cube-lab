@@ -10,15 +10,6 @@ import { playerEyeHeight } from "./systems/GameSystem.ts";
 
 type Point = [number, number, number];
 type Bounds = [min: Point, max: Point];
-const unitBoxBounds: Bounds = [[-1, -1, -1], [1, 1, 1]];
-
-// These meshes in the first map export contain two separate boxes.
-const legacyExtraBoxBounds = new Map<string, Bounds>([
-    ["Cube.010", [[-0.91507, -1, 0.96028], [99.78076, 1, 1]]],
-    ["Cube.011", [[-1.00151, -1, -223.35733], [-0.92864, 1, 1.00688]]],
-    ["wall obstacle", [[-0.80448, -11.47636, -0.99023], [0.80448, -0.53045, 0.99023]]],
-    ["wall obstacle.001", [[-0.80448, -11.47636, -0.99023], [0.80448, -0.53045, 0.99023]]],
-]);
 
 function getMeshBounds(mesh: Mesh): Bounds | undefined {
     const min: Point = [Infinity, Infinity, Infinity];
@@ -64,18 +55,7 @@ function addMapColliders(scene: Scene) {
         const bounds = getMeshBounds(mesh);
         if (!meshTransform || !bounds) continue;
 
-        const [min, max] = bounds;
-        const extra = legacyExtraBoxBounds.get(entity.name ?? "");
-        const matchesLegacyMesh = extra && min.every((value, axis) =>
-            Math.abs(value - Math.min(-1, extra[0][axis])) < 0.0001 &&
-            Math.abs(max[axis] - Math.max(1, extra[1][axis])) < 0.0001);
-        if (matchesLegacyMesh) {
-            // Separate boxes leave the gap between the original mesh parts traversable.
-            addMapBox(scene, `${entity.name} collider`, meshTransform, unitBoxBounds);
-            addMapBox(scene, `${entity.name} extra collider`, meshTransform, extra);
-        } else {
-            addMapBox(scene, `${entity.name} collider`, meshTransform, bounds);
-        }
+        addMapBox(scene, `${entity.name} collider`, meshTransform, bounds);
     }
 }
 
@@ -92,7 +72,8 @@ export async function createStarterScene() {
     }
     addMapColliders(scene);
 
-    const floorCollider = scene.getEntityByName("Cube collider")?.getComponent(Transform);
+    const floor = scene.getEntityByName("floor collider") ?? scene.getEntityByName("Cube collider");
+    const floorCollider = floor?.getComponent(Transform);
     if (!floorCollider) throw Error("The map is missing its floor collider.");
     const spawnY = floorCollider.location[1] + Math.abs(floorCollider.scale[1]) + playerEyeHeight;
     const camera = new Entity();
