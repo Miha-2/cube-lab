@@ -83,7 +83,7 @@ function _createMeshBuffer(state: RenderState, entity: Entity) {
 function createMateralBuffer(state: RenderState, material: Material) {
     if (material instanceof BasicMaterial) {
         material.uniformBuffer = state.device.createBuffer({
-            size: 4 * 4,
+            size: 8 * 4,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM
         });
     }

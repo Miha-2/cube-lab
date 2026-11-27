@@ -107,6 +107,7 @@ export function _writeMaterialBuffer(state: RenderState, entity: Entity) {
         }
 
         state.device.queue.writeBuffer(material.uniformBuffer, 0, material.baseColor);
+        state.device.queue.writeBuffer(material.uniformBuffer, 16, material.emission);
     }
 }
 

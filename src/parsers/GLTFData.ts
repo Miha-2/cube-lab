@@ -160,6 +160,7 @@ export interface Image {
 export type MaterialAlphaMode = 'OPAQUE' | 'MASK' | 'BLEND';
  
 export interface Material {
+    extensions?: { KHR_materials_emissive_strength?: { emissiveStrength?: number } };
     name?: string;
     pbrMetallicRoughness?: MaterialPbrMetallicRoughness;
     normalTexture?: MaterialNormalTextureInfo;

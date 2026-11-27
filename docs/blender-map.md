@@ -34,3 +34,18 @@ grounded, provided there is enough headroom.
 
 After building, `node tests/cube-carry.mjs` checks pickup and
 `node tests/box-collision.mjs` checks stepping.
+
+## Lighting
+
+The renderer supports Blender **Point** lights. Export with **Punctual Lights**
+enabled and the default Standard lighting conversion. Area lights and Blender's
+preview/world lighting are not exported as game lighting.
+
+The current map has three point lights in `R01_Lighting`. Their low Blender power
+is intentional: standard glTF export converts it to candela, which the game uses
+with inverse-square attenuation. Increase or decrease Power in Blender to tune it.
+
+Solid-color emission and `KHR_materials_emissive_strength` are supported for the
+existing strips and cables. Emissive surfaces stay bright without illuminating
+surroundings. The room uses low ambient lighting and hue-preserving tone mapping
+to keep neon colors distinct. Bloom and shadows are not implemented.

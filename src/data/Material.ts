@@ -15,6 +15,7 @@ export abstract class Material {
 export class BasicMaterial extends Material {
     baseTexture: ImageBitmap;
     baseColor: vec4 = vec4.fromValues(0, 0, 0, 1);
+    emission: vec4 = vec4.fromValues(0, 0, 0, 0);
 
     constructor(baseTexture: ImageBitmap, baseColor: vec4) {
         super();

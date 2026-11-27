@@ -18,8 +18,7 @@ export function render(state: RenderState, scene: Scene) {
             view: canvasTexture.createView({ format: state.canvasViewFormat }),
             loadOp: 'clear',
             storeOp: 'store',
-            // Linear values for the sRGB clear color (0.3, 0.6, 0.8).
-            clearValue: [0.073239, 0.318547, 0.603827, 1.0]
+            clearValue: [0.003, 0.005, 0.009, 1.0]
         }],
         depthStencilAttachment: {
             view: depthView,

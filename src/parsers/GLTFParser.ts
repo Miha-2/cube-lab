@@ -537,6 +537,9 @@ export class GLTFParser {
             : await createTempTexture();
         const factor = pbrSpec?.baseColorFactor ?? [1, 1, 1, 1];
         const material = new BasicMaterial(texture, vec4.fromValues(...factor));
+        const emission = materialSpec.emissiveFactor ?? [0, 0, 0];
+        const strength = materialSpec.extensions?.KHR_materials_emissive_strength?.emissiveStrength ?? 1;
+        material.emission = vec4.fromValues(emission[0] * strength, emission[1] * strength, emission[2] * strength, 0);
 
         this.materials.set(materialSpec, material);
         return material;
