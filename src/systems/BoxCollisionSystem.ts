@@ -18,7 +18,7 @@ function clipBoxAxis(current: number, next: number, [min, max]: Interval) {
     return next;
 }
 
-function getBoxBounds(transform: Transform, eyeHeight: number, playerHalfWidth: number) {
+function getBoxBounds(transform: Transform, eyeHeight: number, playerHalfWidth: number, headClearance: number) {
     const [x] = transform.location;
     const halfX = Math.abs(transform.scale[0]) + playerHalfWidth;
     const halfY = Math.abs(transform.scale[1]);
@@ -35,7 +35,7 @@ function getBoxBounds(transform: Transform, eyeHeight: number, playerHalfWidth: 
         [cos, sin], [-cos, -sin], [-sin, cos], [sin, -cos]].map(([ny, nz]) => [
         ny, nz,
         halfY * Math.abs(ny * cos + nz * sin) + halfZ * Math.abs(-ny * sin + nz * cos) +
-            Math.max(0, ny * eyeHeight) + Math.abs(nz) * playerHalfWidth,
+            Math.max(ny * eyeHeight, -ny * headClearance) + Math.abs(nz) * playerHalfWidth,
     ]);
     const xRange: Interval = [x - halfX, x + halfX];
     return { center: transform.location, xRange, planes, yaw, pitch };
@@ -70,12 +70,12 @@ type BoxContact = ReturnType<typeof getBoxBounds> & {
     supportSlope: number | undefined;
 };
 
-export function getPlayerBoxContacts(scene: Scene, location: vec3, eyeHeight: number, playerHalfWidth: number) {
+export function getPlayerBoxContacts(scene: Scene, location: vec3, eyeHeight: number, playerHalfWidth: number, headClearance = 0) {
     const boxes: BoxContact[] = [];
     for (const entity of scene.getEntitiesByComponent(BoxCollider)) {
         const transform = entity.getComponent(Transform);
         if (!transform) continue;
-        const box = getBoxBounds(transform, eyeHeight, playerHalfWidth);
+        const box = getBoxBounds(transform, eyeHeight, playerHalfWidth, headClearance);
         const [x, , z] = vec3.rotateY([0, 0, 0], location, box.center, -box.yaw);
         const surface = getBoxSection(box.planes, 0, z - box.center[2]);
         let supportSlope: number | undefined;
@@ -90,7 +90,7 @@ export function getPlayerBoxContacts(scene: Scene, location: vec3, eyeHeight: nu
     return boxes;
 }
 
-/** Clips the proposed horizontal position in place and finds the support beneath it. */
+/** Clips the horizontal position and finds the nearest surfaces below and above it. */
 export function resolvePlayerBoxMovement(boxes: BoxContact[], location: vec3, next: vec3) {
     for (const box of boxes) {
         const horizontalSection = getBoxSection(box.planes, 1, location[1] - box.center[1]);
@@ -106,8 +106,9 @@ export function resolvePlayerBoxMovement(boxes: BoxContact[], location: vec3, ne
         }
     }
 
-    // Use the highest surface under the resolved horizontal position.
+    // Check vertical surfaces at the resolved horizontal position.
     let groundEyeY = -Infinity;
+    let ceilingEyeY = Infinity;
     let followsSurface = false;
     for (const box of boxes) {
         const [x, , z] = vec3.rotateY([0, 0, 0], next, box.center, -box.yaw);
@@ -119,6 +120,10 @@ export function resolvePlayerBoxMovement(boxes: BoxContact[], location: vec3, ne
             groundEyeY = Math.max(groundEyeY, top);
             followsSurface ||= box.supportSlope !== undefined;
         }
+        const bottom = box.center[1] + section.min;
+        if (location[1] <= bottom + collisionEpsilon) {
+            ceilingEyeY = Math.min(ceilingEyeY, bottom);
+        }
     }
-    return { groundEyeY, followsSurface };
+    return { groundEyeY, ceilingEyeY, followsSurface };
 }

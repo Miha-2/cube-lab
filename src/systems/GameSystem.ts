@@ -8,6 +8,7 @@ const maxWalkableSlope = Math.PI / 6;
 const slideSpeed = 3;
 export const playerEyeHeight = 1.7;
 const playerHalfWidth = 0.3;
+const headClearance = 0.1;
 const gravity = 9.81;
 const jumpSpeed = 6.3;
 const mouseSensitivity = 0.002;
@@ -70,7 +71,12 @@ function updateCameraLook(transform: Transform) {
     transform.target = vec3.add(vec3.create(), transform.location, forward);
 }
 
-function updateVerticalPosition(cameraY: number, groundEyeY: number, grounded: boolean, followsSurface: boolean, dt: number) {
+function updateVerticalPosition(
+    cameraY: number,
+    grounded: boolean,
+    { groundEyeY, ceilingEyeY, followsSurface }: ReturnType<typeof resolvePlayerBoxMovement>,
+    dt: number
+) {
     const isJumping = jumpRequested && grounded && verticalVelocity === 0;
     jumpRequested = false;
     if (isJumping) {
@@ -79,8 +85,24 @@ function updateVerticalPosition(cameraY: number, groundEyeY: number, grounded: b
         return groundEyeY;
     }
 
-    const nextY = cameraY + verticalVelocity * dt - 0.5 * gravity * dt * dt;
-    verticalVelocity -= gravity * dt;
+    let startY = cameraY;
+    let remainingTime = dt;
+    if (verticalVelocity > 0) {
+        const timeAscending = Math.min(dt, verticalVelocity / gravity);
+        const ascent = verticalVelocity * timeAscending - 0.5 * gravity * timeAscending ** 2;
+        const distanceToCeiling = Math.max(0, ceilingEyeY - cameraY);
+        if (ascent >= distanceToCeiling) {
+            // Stop at impact, then fall for the rest of the frame.
+            const impactSpeed = Math.sqrt(Math.max(0, verticalVelocity ** 2 - 2 * gravity * distanceToCeiling));
+            const timeToImpact = 2 * distanceToCeiling / (verticalVelocity + impactSpeed);
+            startY = ceilingEyeY;
+            remainingTime = Math.max(0, dt - timeToImpact);
+            verticalVelocity = 0;
+        }
+    }
+
+    const nextY = startY + verticalVelocity * remainingTime - 0.5 * gravity * remainingTime ** 2;
+    verticalVelocity -= gravity * remainingTime;
 
     // Stop falling when the player's feet reach a surface.
     if (nextY <= groundEyeY) {
@@ -107,7 +129,7 @@ function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
     const next = vec3.scaleAndAdd([0, 0, 0], location, forward, forwardInput * step);
     vec3.scaleAndAdd(next, next, right, rightInput * step);
 
-    const boxes = getPlayerBoxContacts(scene, location, playerEyeHeight, playerHalfWidth);
+    const boxes = getPlayerBoxContacts(scene, location, playerEyeHeight, playerHalfWidth, headClearance);
     const slopeLimit = maxWalkableSlope + 1e-6;
     const grounded = boxes.some(({ supportSlope }) => supportSlope !== undefined && Math.abs(supportSlope) <= slopeLimit);
     const steepBox = boxes.find(({ supportSlope }) => supportSlope !== undefined && Math.abs(supportSlope) > slopeLimit);
@@ -118,8 +140,8 @@ function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
         vec3.scaleAndAdd(next, location, downhill, slideSpeed * dt);
     }
 
-    const { groundEyeY, followsSurface } = resolvePlayerBoxMovement(boxes, location, next);
-    next[1] = updateVerticalPosition(location[1], groundEyeY, grounded, followsSurface, dt);
+    const surfaces = resolvePlayerBoxMovement(boxes, location, next);
+    next[1] = updateVerticalPosition(location[1], grounded, surfaces, dt);
     const offset = vec3.subtract([0, 0, 0], next, location);
     if (offset[0] === 0 && offset[1] === 0 && offset[2] === 0) return;
 
