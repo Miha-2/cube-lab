@@ -5,7 +5,7 @@ import type { Scene } from "../Scene.ts";
 import { clipMovingBox, getBoxHitDistance, getWorldBoxBounds, type BoxBounds } from "./BoxCollisionSystem.ts";
 
 const pickupReach = 3;
-const carryDistance = 1.65;
+const carryDistance = 1.9;
 const gravity = 9.81;
 const carryStates = new WeakMap<Scene, { held: boolean; fallSpeed: number }>();
 
