@@ -1,7 +1,6 @@
 import { vec3 } from "gl-matrix";
 import { BoxCollider } from "./components/BoxCollider.ts";
 import { Camera } from "./components/Camera.ts";
-import { Light, LightType } from "./components/Light.ts";
 import { Mesh } from "./components/Mesh.ts";
 import { Transform, TransformType } from "./components/Transform.ts";
 import { Entity } from "./Entity.ts";
@@ -105,16 +104,6 @@ export async function createStarterScene() {
     camera.addComponent(cameraTransform);
     camera.addComponent(new Camera(1, Math.PI / 3, 0.1, 100));
     scene.addEntity(camera);
-
-    const lightEntity = new Entity();
-    lightEntity.name = "PointLight";
-    const lightTransform = new Transform(TransformType.Free);
-    lightTransform.location = [2, 3, 3];
-    const light = new Light(LightType.Point);
-    light.intensity = 12;
-    lightEntity.addComponent(lightTransform);
-    lightEntity.addComponent(light);
-    scene.addEntity(lightEntity);
 
     return scene;
 }

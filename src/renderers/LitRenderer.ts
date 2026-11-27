@@ -9,14 +9,16 @@ import type { RenderState } from "../RenderState.ts";
 import type { Scene } from "../Scene.ts";
 import shaderCode from "../shaders/Lit.wgsl?raw";
 
+const pointLightFloatCount = 8;
 
 /**
  * Renders textured objects with ambient and point lighting.
  */
 export class LitRenderer {
     private readonly device: GPUDevice;
-    private readonly lightBuffer: GPUBuffer;
-    private readonly lightData = new Float32Array(8);
+    private readonly cameraBuffer: GPUBuffer;
+    private readonly frameBindGroupLayout: GPUBindGroupLayout;
+    private frameLighting?: { buffer: GPUBuffer; data: Float32Array<ArrayBuffer>; bindGroup: GPUBindGroup };
     pipeline: GPURenderPipeline;        // for objects without skeleton
     skinnedPipeline: GPURenderPipeline; // for objects with skeleton
 
@@ -25,7 +27,6 @@ export class LitRenderer {
     // once per render invocation, model bind group is set once for each
     // entity, and material bind group is set for each material
     // (pipeline). Skin bind group binds skeleton data.
-    frameBindGroup: GPUBindGroup;
     modelBindGroups: Map<Entity, GPUBindGroup> = new Map();
     materialBindGroups: Map<Material, GPUBindGroup> = new Map();
     skinBindGroups: Map<Entity, GPUBindGroup> = new Map();
@@ -41,24 +42,19 @@ export class LitRenderer {
             throw Error("No camera provided to LitRenderer!");
         }
         this.device = renderState.device;
-        this.lightBuffer = this.device.createBuffer({
-            label: 'PointLightUniforms',
-            size: this.lightData.byteLength,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-        });
 
         // Bind Group Layouts
 
-        const frameBindGroupLayout = renderState.device.createBindGroupLayout({
+        this.frameBindGroupLayout = renderState.device.createBindGroupLayout({
             label: 'LitFrameLayout',
             entries: [{
                 binding: 0,  // View + Projection matrix
                 visibility: GPUShaderStage.VERTEX,
                 buffer: { type: 'uniform' }
             }, {
-                binding: 1,  // Point light uniforms
+                binding: 1,  // Point light array
                 visibility: GPUShaderStage.FRAGMENT,
-                buffer: { type: 'uniform' }
+                buffer: { type: 'read-only-storage' }
             }]
         });
 
@@ -111,7 +107,7 @@ export class LitRenderer {
 
         const pipelineLayout = renderState.device.createPipelineLayout({
             bindGroupLayouts: [
-                frameBindGroupLayout,
+                this.frameBindGroupLayout,
                 modelBindGroupLayout,
                 materialBindGroupLayout
             ]
@@ -119,7 +115,7 @@ export class LitRenderer {
 
         const skinnedPipelineLayout = renderState.device.createPipelineLayout({
             bindGroupLayouts: [
-                frameBindGroupLayout,
+                this.frameBindGroupLayout,
                 modelBindGroupLayout,
                 materialBindGroupLayout,
                 skinBindGroupLayout
@@ -211,16 +207,7 @@ export class LitRenderer {
         if (!cameraComponent || !cameraComponent.cameraBuffer) {
             throw Error("Provided entity is not a valid camera!");
         }
-        this.frameBindGroup = renderState.device.createBindGroup({
-            layout: frameBindGroupLayout,
-            entries: [{
-                binding: 0,
-                resource: cameraComponent.cameraBuffer
-            }, {
-                binding: 1,
-                resource: this.lightBuffer
-            }]
-        });
+        this.cameraBuffer = cameraComponent.cameraBuffer;
 
         for (const entity of scene.entities) {
             const transform = entity.getComponent(Transform);
@@ -274,23 +261,49 @@ export class LitRenderer {
         }
     }
 
-    private updatePointLight(scene: Scene) {
-        this.lightData[3] = 0;
+    private updatePointLights(scene: Scene) {
+        const pointLights: { light: Light; transform: Transform }[] = [];
         for (const entity of scene.getEntitiesByComponent(Light)) {
             const light = entity.getComponent(Light);
             const transform = entity.getComponent(Transform);
-            if (light?.type !== LightType.Point || !transform) continue;
-
-            // The translation column gives the light position in world space.
-            const worldMatrix = transform.worldMatrix;
-            this.lightData[0] = worldMatrix[12];
-            this.lightData[1] = worldMatrix[13];
-            this.lightData[2] = worldMatrix[14];
-            this.lightData[3] = light.intensity;
-            this.lightData.set(light.color, 4);
-            break;
+            if (light?.type === LightType.Point && transform) pointLights.push({ light, transform });
         }
-        this.device.queue.writeBuffer(this.lightBuffer, 0, this.lightData);
+
+        // Keep one zero-intensity entry when the scene has no point lights.
+        const floatCount = Math.max(1, pointLights.length) * pointLightFloatCount;
+        if (!this.frameLighting || this.frameLighting.data.length !== floatCount) {
+            const data = new Float32Array(floatCount);
+            const buffer = this.device.createBuffer({
+                label: 'PointLights',
+                size: data.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            });
+            const bindGroup = this.device.createBindGroup({
+                layout: this.frameBindGroupLayout,
+                entries: [
+                    { binding: 0, resource: this.cameraBuffer },
+                    { binding: 1, resource: buffer }
+                ]
+            });
+            this.frameLighting?.buffer.destroy();
+            this.frameLighting = { buffer, data, bindGroup };
+        }
+
+        const { buffer, data, bindGroup } = this.frameLighting;
+        if (pointLights.length === 0) data[3] = 0;
+        for (let i = 0; i < pointLights.length; i++) {
+            const { light, transform } = pointLights[i];
+            const offset = i * pointLightFloatCount;
+            const worldMatrix = transform.worldMatrix;
+            data[offset] = worldMatrix[12];
+            data[offset + 1] = worldMatrix[13];
+            data[offset + 2] = worldMatrix[14];
+            data[offset + 3] = light.intensity;
+            data.set(light.color, offset + 4);
+            data[offset + 7] = 1 / (light.range * light.range);
+        }
+        this.device.queue.writeBuffer(buffer, 0, data);
+        return bindGroup;
     }
 
     /**
@@ -299,8 +312,7 @@ export class LitRenderer {
      * @param scene the scene to render
      */
     render(pass: GPURenderPassEncoder, scene: Scene) {
-        this.updatePointLight(scene);
-        pass.setBindGroup(0, this.frameBindGroup);
+        pass.setBindGroup(0, this.updatePointLights(scene));
         for (const entity of scene.entities) {
             const mesh = entity.getComponent(Mesh);
             if (!mesh) {
