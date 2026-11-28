@@ -137,3 +137,11 @@ Run `npm run test:signals` to check map connections, independent materials,
 active/inactive transitions and changed-material GPU uploads. To also check a
 separately exported asset-library GLB, pass its path to
 `node tests/signal-states.mjs /absolute/path/to/assets.glb` after building.
+
+## Current ceiling layout
+
+`R01_Ceilings` contains 24 tiles on a 2 m grid covering both rooms (12 x 8 m):
+14 plain panels, 6 cyan light panels and 4 vents. Their parent origins are at
+Z = 3.2 m, putting the lowest borders at the 3 m wall height. A single hidden
+`COL_R01_Ceiling` box provides head collision across the whole ceiling.
+The cyan strips are decorative emission and do not replace the existing point lights.

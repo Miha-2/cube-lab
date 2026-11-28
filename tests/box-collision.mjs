@@ -66,8 +66,10 @@ for (const side of [-1, 1]) for (const direction of [-1, 1]) {
 if (process.argv[2]) {
  const bytes = await readFile(process.argv[2]); globalThis.fetch = async () => new Response(bytes);
  const { createStarterScene } = await import('../dist/StarterScene.js'); const scene = await createStarterScene();
- assert.equal(scene.getEntitiesByComponent(BoxCollider).length, 49);
+ assert.equal(scene.getEntitiesByComponent(BoxCollider).length, 50);
  assert(!scene.getEntitiesByComponent(Mesh).some(entity => entity.name.startsWith('COL_')), 'Collision helpers are invisible');
+ assert(Math.abs(move(scene, [4, 1.7, -4], [4, 1.7, -4], 0).ceilingEyeY - 2.9) < 1e-5, 'Ceiling stops the head at 3 m');
+ assert.equal(scene.entities.filter(entity => /^R01_Ceiling_(Plain|Light|Vent)_\d+_\d+$/.test(entity.name ?? '')).length, 24, 'Both rooms have the modular ceiling grid');
  assert(scene.getEntitiesByComponent(Carryable)[0].getComponent(Carryable).collider, 'Cube linked to explicit collider');
  for (const entity of scene.getEntitiesByComponent(BoxCollider)) {
   const transform = entity.getComponent(Transform);
@@ -101,6 +103,6 @@ if (process.argv[2]) {
  button.location = [button.location[0], 0, button.location[2]]; computeTransforms(scene); syncBoxColliders(scene);
  const physics = scene.getEntityByName('COL_PressurePlate_Button physics').getComponent(Transform);
  assert(Math.abs(physics.location[1] - .06) < 1e-5, 'Button collider follows depression');
- console.log('Passed real-map import: 49 explicit boxes, no helper meshes rendered, cube association, door opening, pressure plate stepping and moving proxy synchronization.');
+ console.log('Passed real-map import: 50 explicit boxes, no helper meshes rendered, cube association, door opening, pressure plate stepping and moving proxy synchronization.');
 }
 console.log('Passed auto-step: 4/8/12 cm steps, tall obstacles, headroom, disabled stepping and wall rejection.');
