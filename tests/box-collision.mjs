@@ -45,6 +45,24 @@ assert(move(room(.08, true), [-1.2, 1.7, 0], [-1, 1.7, 0]).next[0] < -1.09, 'Low
 assert(move(room(.08), [-1.2, 1.7, 0], [-1, 1.7, 0], 0).next[0] < -1.09, 'No stepping when disabled/airborne');
 const crossed = move(room(.08, false, true), [-1.2, 1.7, 0], [.5, 1.7, 0]);
 assert(crossed.next[0] < .1, 'Stepping must not bypass a wall');
+// Blender rotations use Float32: adjacent rotated boxes must not catch the player at seams.
+for (const side of [-1, 1]) for (const direction of [-1, 1]) {
+ const scene = new Scene();
+ for (let i = 0; i < 4; i++) {
+  box(scene, [8, 1.5, -i * 2], [1, 1.5, .1]);
+ }
+ for (const entity of scene.getEntitiesByComponent(BoxCollider)) {
+  entity.getComponent(Transform).rotation = new Float32Array([0, Math.SQRT1_2, 0, Math.SQRT1_2]);
+ }
+ let position = [8 + side * .5, 1.7, direction < 0 ? .5 : -6.5];
+ for (let frame = 0; frame < 80; frame++) {
+  const desired = [position[0] - side * .08, 1.7, position[2] + direction * .08];
+  const { next } = move(scene, position, desired, 0);
+  assert(Math.abs(next[2] - desired[2]) < 1e-5, 'Slide past rotated wall seams in both directions');
+  assert(side * (next[0] - 8) >= .4 - 1e-5, 'Sliding must still block movement into the wall');
+  position = next;
+ }
+}
 if (process.argv[2]) {
  const bytes = await readFile(process.argv[2]); globalThis.fetch = async () => new Response(bytes);
  const { createStarterScene } = await import('../dist/StarterScene.js'); const scene = await createStarterScene();

@@ -3,7 +3,8 @@ import { BoxCollider } from "../components/BoxCollider.ts";
 import { Transform } from "../components/Transform.ts";
 import type { Scene } from "../Scene.ts";
 
-const collisionEpsilon = 1e-8;
+// Float32 map rotations lose more than 1e-8 m at wall seams.
+const collisionEpsilon = 1e-5;
 
 type Interval = [min: number, max: number];
 type BoxPlane = [normalY: number, normalZ: number, limit: number];
