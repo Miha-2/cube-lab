@@ -146,10 +146,24 @@ function getBoxSection(planes: BoxPlane[], axis: 0 | 1, fixed: number) {
 type BoxContact = ReturnType<typeof getBoxBounds> & {
     x: number;
     z: number;
+    supportsPlayer: boolean;
     supportSlope: number | undefined;
 };
 
-export function getPlayerBoxContacts(scene: Scene, location: vec3, eyeHeight: number, playerHalfWidth: number, headClearance = 0) {
+function getSurfaceSlope(pitch: number, [normalY, normalZ]: BoxPlane) {
+    // The expanded collider has a flat strip at the edge of an inclined face.
+    return Math.abs(normalZ) <= collisionEpsilon ? pitch : Math.atan2(normalZ, normalY);
+}
+
+function getVerticalBoxSection(box: BoxContact, location: vec3) {
+    const [x, , z] = vec3.rotateY([0, 0, 0], location, box.center, -box.yaw);
+    if (isInside(x, box.xRange)) return getBoxSection(box.planes, 0, z - box.center[2]);
+}
+
+export function getPlayerBoxContacts(
+    scene: Scene, location: vec3, eyeHeight: number, playerHalfWidth: number, headClearance = 0,
+    unsupportedBox?: Transform
+) {
     const boxes: BoxContact[] = [];
     for (const entity of scene.getEntitiesByComponent(BoxCollider)) {
         const transform = entity.getComponent(Transform);
@@ -157,23 +171,19 @@ export function getPlayerBoxContacts(scene: Scene, location: vec3, eyeHeight: nu
         const box = getBoxBounds(transform, eyeHeight, playerHalfWidth, headClearance);
         const [x, , z] = vec3.rotateY([0, 0, 0], location, box.center, -box.yaw);
         const surface = getBoxSection(box.planes, 0, z - box.center[2]);
+        const supportsPlayer = transform !== unsupportedBox;
         let supportSlope: number | undefined;
-        if (surface && isInside(x, box.xRange) &&
+        if (supportsPlayer && surface && isInside(x, box.xRange) &&
             Math.abs(location[1] - box.center[1] - surface.max) <= collisionEpsilon) {
-            const [normalY, normalZ] = surface.upperPlane;
-            // The expanded collider has a flat strip at the edge of an inclined face.
-            supportSlope = Math.abs(normalZ) <= collisionEpsilon ? box.pitch : Math.atan2(normalZ, normalY);
+            supportSlope = getSurfaceSlope(box.pitch, surface.upperPlane);
         }
-        boxes.push({ ...box, x, z, supportSlope });
+        boxes.push({ ...box, x, z, supportsPlayer, supportSlope });
     }
     return boxes;
 }
 
 /** Clips the horizontal position and finds the nearest surfaces below and above it. */
-export function resolvePlayerBoxMovement(boxes: BoxContact[], location: vec3, next: vec3, maxStepHeight = 0): {
-    groundEyeY: number; ceilingEyeY: number; followsSurface: boolean;
-} {
-    const desired = vec3.clone(next);
+export function resolvePlayerBoxMovement(boxes: BoxContact[], location: vec3, next: vec3) {
     for (const box of boxes) {
         const horizontalSection = getBoxSection(box.planes, 1, location[1] - box.center[1]);
         if (!horizontalSection || box.supportSlope !== undefined) continue;
@@ -193,12 +203,10 @@ export function resolvePlayerBoxMovement(boxes: BoxContact[], location: vec3, ne
     let ceilingEyeY = Infinity;
     let followsSurface = false;
     for (const box of boxes) {
-        const [x, , z] = vec3.rotateY([0, 0, 0], next, box.center, -box.yaw);
-        if (!isInside(x, box.xRange)) continue;
-        const section = getBoxSection(box.planes, 0, z - box.center[2]);
+        const section = getVerticalBoxSection(box, next);
         if (!section) continue;
         const top = box.center[1] + section.max;
-        if (box.supportSlope !== undefined || location[1] >= top - collisionEpsilon) {
+        if (box.supportsPlayer && (box.supportSlope !== undefined || location[1] >= top - collisionEpsilon)) {
             groundEyeY = Math.max(groundEyeY, top);
             followsSurface ||= box.supportSlope !== undefined;
         }
@@ -207,35 +215,33 @@ export function resolvePlayerBoxMovement(boxes: BoxContact[], location: vec3, ne
             ceilingEyeY = Math.min(ceilingEyeY, bottom);
         }
     }
-    if (maxStepHeight > 0 && (next[0] !== desired[0] || next[2] !== desired[2])) {
-        const heights: number[] = [];
-        for (const box of boxes) {
-            if (Math.abs(box.pitch) > collisionEpsilon) continue;
-            const [x, , z] = vec3.rotateY(vec3.create(), desired, box.center, -box.yaw);
-            if (!isInside(x, box.xRange)) continue;
-            const section = getBoxSection(box.planes, 0, z - box.center[2]);
-            if (!section) continue;
-            const top = box.center[1] + section.max;
-            const rise = top - location[1];
-            if (rise > collisionEpsilon && rise <= maxStepHeight + 1e-6) heights.push(top);
-        }
-        for (const top of heights.sort((a, b) => a - b)) {
-            const raised = vec3.fromValues(location[0], top + 1e-6, location[2]);
-            const blockedAbove = boxes.some(box => {
-                const section = getBoxSection(box.planes, 0, box.z - box.center[2]);
-                if (!section || !isInside(box.x, box.xRange)) return false;
-                const bottom = box.center[1] + section.min;
-                return bottom >= location[1] - collisionEpsilon && bottom < raised[1];
-            });
-            if (blockedAbove) continue;
-            const trial = vec3.fromValues(desired[0], raised[1], desired[2]);
-            const surfaces = resolvePlayerBoxMovement(boxes, raised, trial);
-            if (Math.hypot(trial[0] - desired[0], trial[2] - desired[2]) > 1e-6 ||
-                surfaces.ceilingEyeY < raised[1] ||
-                Math.abs(surfaces.groundEyeY - top) > 1e-5) continue;
-            vec3.copy(next, trial);
-            return { ...surfaces, followsSurface: true };
+    return { groundEyeY, ceilingEyeY, followsSurface };
+}
+
+export function tryPlayerStep(boxes: BoxContact[], location: vec3, desired: vec3, maxHeight: number, slopeLimit: number) {
+    let stepY = location[1];
+    for (const box of boxes) {
+        if (!box.supportsPlayer) continue;
+        const section = getVerticalBoxSection(box, desired);
+        if (!section || Math.abs(getSurfaceSlope(box.pitch, section.upperPlane)) > slopeLimit) continue;
+        const top = box.center[1] + section.max;
+        if (top > stepY + collisionEpsilon && top - location[1] <= maxHeight + collisionEpsilon) {
+            stepY = top;
         }
     }
-    return { groundEyeY, ceilingEyeY, followsSurface };
+    if (stepY === location[1]) return;
+
+    // Check the lift at the starting position before retrying the horizontal move.
+    for (const box of boxes) {
+        const section = getVerticalBoxSection(box, location);
+        if (!section) continue;
+        const underside = box.center[1] + section.min;
+        if (location[1] <= underside + collisionEpsilon && stepY > underside + collisionEpsilon) return;
+    }
+
+    const raised: vec3 = [location[0], stepY, location[2]];
+    const stepped: vec3 = [desired[0], stepY, desired[2]];
+    resolvePlayerBoxMovement(boxes, raised, stepped);
+    if (Math.abs(stepped[0] - desired[0]) <= collisionEpsilon &&
+        Math.abs(stepped[2] - desired[2]) <= collisionEpsilon) return stepped;
 }

@@ -13,7 +13,8 @@ const { BoxCollider } = await import('../dist/components/BoxCollider.js');
 const { Carryable } = await import('../dist/components/Carryable.js');
 const { GLTFParser } = await import('../dist/parsers/GLTFParser.js');
 const { computeTransforms } = await import('../dist/systems/TransformSystem.js');
-const { updateCubeCarry, getCubeInteractionTarget } = await import('../dist/systems/CubeCarrySystem.js');
+const { updateCubeCarry, getCubeInteractionTarget, getHeldCubeCollider } = await import('../dist/systems/CubeCarrySystem.js');
+const { getPlayerBoxContacts, resolvePlayerBoxMovement } = await import('../dist/systems/BoxCollisionSystem.js');
 
 const bytes = new Uint8Array(await readFile(new URL('../data/map_new/map.glb', import.meta.url)));
 const parser = new GLTFParser();
@@ -73,8 +74,15 @@ assert.equal(updateCubeCarry(scene, camera, player, false, 0), 'pickup');
 assert.equal(getCubeInteractionTarget(scene), near.carryable.collider);
 assert.equal(updateCubeCarry(scene, camera, player, true, .016), 'drop');
 assert.equal(getCubeInteractionTarget(scene), near.carryable.collider);
+assert.equal(getHeldCubeCollider(scene), near.carryable.collider);
 assert.equal(far.transform.location[2], -3, 'Only the held cube should follow the camera');
+const [cubeX, cubeY, cubeZ] = near.carryable.collider.location;
+const aboveHeld = [cubeX, cubeY + 0.5 + 1.7, cubeZ];
+const boxes = getPlayerBoxContacts(scene, aboveHeld, 1.7, .3, .1, getHeldCubeCollider(scene));
+assert.equal(resolvePlayerBoxMovement(boxes, aboveHeld, [...aboveHeld]).groundEyeY, -Infinity,
+    'The held cube must not support the player');
 updateCubeCarry(scene, camera, player, true, 0);
+assert.equal(getHeldCubeCollider(scene), undefined);
 const blocker = box(scene, 'Wall', [0, 1.7, -1], [.5, 1, .1]);
 assert.equal(updateCubeCarry(scene, camera, player, false, 0), undefined, 'Cannot pick through a wall');
 blocker.location = [10, 1.7, -1];
