@@ -17,7 +17,8 @@
     "serve": "serve -l 3000 .",
     "dev": "vite",
     "updates": "ncu",
-    "update": "ncu --interactive"
+    "update": "ncu --interactive",
+    "test:signals": "npm run build && node tests/signal-states.mjs"
   },
   "devDependencies": {
     "@webgpu/types": "^0.1.74",

@@ -7,6 +7,7 @@ import { Mesh } from "../components/Mesh.ts";
 import type { Entity } from "../Entity.ts";
 import { BasicMaterial } from "../data/Material.ts";
 import { Skin } from "../components/Skin.ts";
+import { SignalIndicator } from "../components/SignalIndicator.ts";
 
 const normalMatrix = mat4.create();
 
@@ -122,6 +123,11 @@ export function updateBuffers(state: RenderState, scene: Scene) {
     // We only update buffers that likely change every frame.
     // Change if your buffer update requirements are different.
     for (const entity of scene.entities) {
+        const indicator = entity.getComponent(SignalIndicator);
+        if (indicator?.dirty) {
+            _writeMaterialBuffer(state, entity);
+            indicator.dirty = false;
+        }
         _writeCameraBuffer(state, entity);
         _writeTransformBuffer(state, entity);
         _writeSkinBuffer(state, entity);

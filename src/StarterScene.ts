@@ -9,6 +9,7 @@ import type { Scene } from "./Scene.ts";
 import { playerEyeHeight } from "./systems/GameSystem.ts";
 import { computeTransforms } from "./systems/TransformSystem.ts";
 import { syncBoxColliders } from "./systems/BoxCollisionSystem.ts";
+import { updateSignalIndicators } from "./systems/SignalSystem.ts";
 
 function addMapColliders(scene: Scene) {
     const proxies = scene.getEntitiesByComponent(BoxCollider);
@@ -50,6 +51,7 @@ export async function createStarterScene() {
     }
     computeTransforms(scene);
     addMapColliders(scene);
+    updateSignalIndicators(scene);
 
     const spawn = scene.getEntityByName("R01_PlayerSpawn")?.getComponent(Transform);
     if (!spawn) throw Error("The map is missing its R01_PlayerSpawn marker.");

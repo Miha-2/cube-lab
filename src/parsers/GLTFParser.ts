@@ -13,6 +13,8 @@ import { Skin } from "../components/Skin.ts";
 import { Light, LightType } from "../components/Light.ts";
 import { Primitive } from "../data/Primitive.ts";
 import { createTempTexture } from "../Utils.ts";
+import { SignalState } from "../components/SignalState.ts";
+import { SignalIndicator } from "../components/SignalIndicator.ts";
 
 /**
  * A glTF parser.
@@ -168,12 +170,31 @@ export class GLTFParser {
 
         const nodeEntity = new Entity();
         nodeEntity.name = nodeSpec.name ?? null;
+        const extras = nodeSpec.extras;
+        if (typeof extras?.signal_id === "string" && extras.signal_id.trim()) {
+            nodeEntity.addComponent(new SignalState(extras.signal_id.trim(),
+                typeof extras.signal_source === "string" ? extras.signal_source.trim() : "",
+                extras.signal_active === true));
+        }
 
         const collisionOnly = nodeSpec.extras?.collision_type === "box";
         if (collisionOnly) nodeEntity.addComponent(new BoxCollider());
         if (nodeSpec.mesh !== undefined && !collisionOnly) {
-            const mesh = await this.parseMesh(nodeSpec.mesh);
+            let mesh = await this.parseMesh(nodeSpec.mesh);
             if (mesh) {
+                if (extras?.state_indicator === "grey" || extras?.state_indicator === "red") {
+                    // Meshes and materials are cached by glTF; give each indicator its own state.
+                    const instance = new Mesh();
+                    for (const primitives of mesh.primitives.values()) for (const primitive of primitives) {
+                        const source = primitive.material;
+                        if (!(source instanceof BasicMaterial)) continue;
+                        const material = new BasicMaterial(source.baseTexture, vec4.clone(source.baseColor));
+                        material.emission = vec4.clone(source.emission);
+                        instance.addPrimitive(new Primitive(primitive.vertices, primitive.indices, material, primitive.skinVertices));
+                    }
+                    mesh = instance;
+                    nodeEntity.addComponent(new SignalIndicator(extras.state_indicator));
+                }
                 nodeEntity.addComponent(mesh);
                 if (nodeSpec.extras?.game_type === "cube") {
                     nodeEntity.addComponent(new Carryable());

@@ -4,6 +4,7 @@ import type { Scene } from "../Scene.ts";
 import { getPlayerBoxContacts, resolvePlayerBoxMovement, tryPlayerStep, syncBoxColliders } from "./BoxCollisionSystem.ts";
 import { getHeldCubeCollider, updateCubeCarry } from "./CubeCarrySystem.ts";
 import { computeTransforms } from "./TransformSystem.ts";
+import { updateSignalIndicators } from "./SignalSystem.ts";
 
 const cameraSpeed = 7;
 const maxStepHeight = 0.12;
@@ -167,6 +168,7 @@ function updateCameraMovement(scene: Scene, transform: Transform, dt: number) {
 
 /** Updates game logic once per frame. Delta time is in seconds. */
 export function updateGame(scene: Scene, dt: number) {
+    updateSignalIndicators(scene);
     computeTransforms(scene);
     syncBoxColliders(scene);
     const transform = scene.getEntityByName("PlayerCamera")?.getComponent(Transform);
