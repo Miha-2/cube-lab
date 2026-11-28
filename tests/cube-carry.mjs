@@ -16,7 +16,7 @@ const { computeTransforms } = await import('../dist/systems/TransformSystem.js')
 const { updateCubeCarry, getCubeInteractionTarget, getHeldCubeCollider } = await import('../dist/systems/CubeCarrySystem.js');
 const { getPlayerBoxContacts, resolvePlayerBoxMovement } = await import('../dist/systems/BoxCollisionSystem.js');
 
-const bytes = new Uint8Array(await readFile(new URL('../data/map_new/map.glb', import.meta.url)));
+const bytes = new Uint8Array(await readFile(new URL('../data/map/map.glb', import.meta.url)));
 const parser = new GLTFParser();
 await parser.setBinary(bytes);
 const cubeNode = parser.data.nodes.find(node => ['R01_PuzzleCube', 'R01_Cube_01', 'CUBE'].includes(node.name));

@@ -38,7 +38,7 @@ function addMapColliders(scene: Scene) {
 }
 
 export async function createStarterScene() {
-    const response = await fetch("data/map_new/map.glb");
+    const response = await fetch("data/map/map.glb");
     if (!response.ok) {
         throw Error(`Could not load map: ${response.status} ${response.statusText}`);
     }

@@ -1,5 +1,13 @@
 # Blender gameplay properties
 
+## Blender source files
+
+- `data/assets/assets.blend`: modular walls, cubes, levers, and other reusable map parts.
+- `data/map/map.blend`: current map source.
+- `data/map/map.glb`: current exported map loaded by the game.
+
+Keep both Blender source files in Git. Blender's numbered backup files are ignored.
+
 Name objects for organization, for example `R01_Cube_01`, `R01_Cube_02`, and `R02_Cube_01`.
 Names do not enable pickup.
 
@@ -13,7 +21,7 @@ Set this under **Object Properties > Custom Properties**, not on the mesh data o
 Duplicating the tagged cube preserves the property. Each cube has its own carry state and collider;
 the player can carry one cube at a time.
 
-Export `data/map_new/map.blend` to `data/map_new/map.glb` with **Include > Custom Properties** enabled.
+Export `data/map/map.blend` to `data/map/map.glb` with **Include > Custom Properties** enabled.
 The importer reads the exported glTF `extras.game_type` and adds the `Carryable` component.
 Other objects, including objects merely named `CUBE`, are not automatically carryable.
 

@@ -5,6 +5,6 @@ dist/
 !.vscode/extensions.json
 
 AGENTS.md
-*.blend1
+*.blend[0-9]*
 
 .DS_Store
